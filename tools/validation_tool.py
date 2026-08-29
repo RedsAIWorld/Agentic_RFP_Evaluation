@@ -88,6 +88,17 @@ def verify_evidence(evidence_items: list, pages: list) -> list:
                 if alt_page in pages_by_num and _quote_found_in_page(quote, pages_by_num[alt_page]):
                     verified = True
                     break
+        if not verified:
+            # A sentence can straddle a physical page break in the source PDF (the
+            # text before the break lands on page N, the rest on page N+1), so a
+            # verbatim quote can be split across two pages even though it's real.
+            # Join adjacent pages and re-check before concluding it's unverifiable.
+            for a, b in ((page_num, page_num + 1), (page_num - 1, page_num)):
+                if a in pages_by_num and b in pages_by_num:
+                    joined = pages_by_num[a] + " " + pages_by_num[b]
+                    if _quote_found_in_page(quote, joined):
+                        verified = True
+                        break
         verified_items.append({"quote": quote, "page": page_num, "verified": verified})
     return verified_items
 
