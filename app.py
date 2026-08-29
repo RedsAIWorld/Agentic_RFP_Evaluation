@@ -12,7 +12,6 @@ import datetime as dt
 
 import streamlit as st
 import plotly.graph_objects as go
-import pandas as pd
 
 from db.seed import init_db
 from db import repository as repo
@@ -524,13 +523,10 @@ with tab_scorecards:
                 detail = s.criterion_scoring_detail.get(r.criterion_id) or {}
                 contribution = orch.rt.criterion_weighted_contribution(r.score, r.max_score, r.weight)
                 table_rows.append({
-                    "Criterion": f"{r.name} ({r.weight:g}%)",
-                    "LLM Score": r.score,
-                    "Weighted Contribution": contribution,
-                    "Peer Benchmark": detail.get("benchmark"),
-                    "Gap": detail.get("gap"),
-                    "Relative %": detail.get("relative_pct"),
-                    "Evidence": (r.evidence_status or "missing").title(),
+                    "name": r.name, "weight": r.weight, "score": r.score, "max_score": r.max_score,
+                    "contribution": contribution, "benchmark": detail.get("benchmark"),
+                    "gap": detail.get("gap"), "relative_pct": detail.get("relative_pct"),
+                    "evidence_status": r.evidence_status or "missing",
                 })
             for d in batch.deterministic_criteria:
                 det_score, _ = orch.rt.score_incumbency(
@@ -539,24 +535,12 @@ with tab_scorecards:
                 detail = s.criterion_scoring_detail.get(d["criterion_id"]) or {}
                 contribution = orch.rt.criterion_weighted_contribution(det_score, d["max_score"], d["weight"])
                 table_rows.append({
-                    "Criterion": f"{d['name']} ({d['weight']:g}%)",
-                    "LLM Score": det_score,
-                    "Weighted Contribution": contribution,
-                    "Peer Benchmark": detail.get("benchmark"),
-                    "Gap": detail.get("gap"),
-                    "Relative %": detail.get("relative_pct"),
-                    "Evidence": "Deterministic",
+                    "name": d["name"], "weight": d["weight"], "score": det_score, "max_score": d["max_score"],
+                    "contribution": contribution, "benchmark": detail.get("benchmark"),
+                    "gap": detail.get("gap"), "relative_pct": detail.get("relative_pct"),
+                    "evidence_status": None,
                 })
-            st.dataframe(
-                pd.DataFrame(table_rows), hide_index=True, use_container_width=True,
-                column_config={
-                    "LLM Score": st.column_config.ProgressColumn("Score", min_value=0, max_value=10, format="%d"),
-                    "Weighted Contribution": st.column_config.NumberColumn("Contribution", format="%.2f"),
-                    "Peer Benchmark": st.column_config.NumberColumn(format="%g"),
-                    "Gap": st.column_config.NumberColumn(format="%+g"),
-                    "Relative %": st.column_config.NumberColumn(format="%.1f%%"),
-                },
-            )
+            st.markdown(ui.scoring_table(table_rows), unsafe_allow_html=True)
             st.caption(f"Total: {s.absolute_score:.2f} absolute score  ·  {s.ppi:.2f} PPI. "
                        f"Peer benchmark is the highest valid score any evaluated supplier achieved on that criterion this run.")
 

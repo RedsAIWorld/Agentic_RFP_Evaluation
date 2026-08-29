@@ -201,6 +201,38 @@ div[data-baseweb="tab-highlight"] { background: linear-gradient(90deg, #4338CA, 
 }
 .evidence-quote.verified { border-left-color: var(--good); }
 .evidence-quote.unverified { border-left-color: var(--critical); background: #fdf2f2; }
+
+/* ---------- Scoring detail table ---------- */
+.scoring-table-wrap {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  padding: 0.3rem 0.2rem 0.5rem; margin: 0.3rem 0 0.6rem; overflow-x: auto;
+}
+table.scoring-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+table.scoring-table thead th {
+  text-align: left; color: var(--ink-muted); font-size: 0.68rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.05em; padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid var(--gridline); white-space: nowrap;
+}
+table.scoring-table thead th.num, table.scoring-table td.num { text-align: right; }
+table.scoring-table tbody td {
+  padding: 0.6rem 0.9rem; border-bottom: 1px solid var(--gridline);
+  color: var(--ink); vertical-align: middle;
+}
+table.scoring-table tbody tr:last-child td { border-bottom: none; }
+table.scoring-table tbody tr:hover td { background: var(--page); }
+.score-cell { display: flex; align-items: center; gap: 0.6rem; }
+.score-cell .bar-track { flex: 1; min-width: 64px; }
+.score-cell .score-num { font-variant-numeric: tabular-nums; font-weight: 700; width: 1.6rem; text-align: right; }
+.crit-name { font-weight: 600; color: var(--ink); }
+.crit-weight { color: var(--ink-muted); font-size: 0.78rem; margin-left: 0.3rem; }
+.gap-pos { color: var(--good); font-weight: 700; font-variant-numeric: tabular-nums; }
+.gap-zero { color: var(--ink-secondary); font-variant-numeric: tabular-nums; }
+.gap-neg { color: var(--critical); font-weight: 700; font-variant-numeric: tabular-nums; }
+.deterministic-badge {
+  display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.16rem 0.65rem;
+  border-radius: 999px; font-size: 0.74rem; font-weight: 700; color: var(--ink-secondary);
+  background: var(--page); border: 1px solid var(--border); white-space: nowrap;
+}
 </style>
 """
 
@@ -241,3 +273,56 @@ def metric_tile(label: str, value: str, sub: str = "") -> str:
 
 def avatar(name: str, color: str) -> str:
     return f'<span class="avatar" style="background:{color}">{initials(name)}</span>'
+
+
+def _gap_cell(gap) -> str:
+    if gap is None:
+        return '<span class="gap-zero">&mdash;</span>'
+    if gap > 0:
+        return f'<span class="gap-pos">+{gap:g}</span>'
+    if gap < 0:
+        return f'<span class="gap-neg">{gap:g}</span>'
+    return '<span class="gap-zero">+0</span>'
+
+
+def scoring_table(rows: list) -> str:
+    """Renders the per-criterion scoring breakdown as a styled HTML table, not
+    a native st.dataframe -- st.dataframe is a canvas-based grid widget that
+    can't take this app's CSS, so it always looks like generic Streamlit
+    chrome next to the rest of the hand-styled UI. This gives full control
+    (brand-colored progress bars, colored gap indicators, evidence badges)
+    at the cost of native sort/resize, which a ~5-8 row table doesn't need.
+
+    Each row dict: name, weight, score, max_score, contribution, benchmark,
+    gap, relative_pct, evidence_status (None for a deterministic criterion).
+    """
+    body = ""
+    for r in rows:
+        score_bar = bar(r["score"], r["max_score"], color=SEQUENTIAL_BLUE)
+        benchmark = r.get("benchmark")
+        benchmark_html = f"{benchmark:g}" if benchmark is not None else "&mdash;"
+        rel = r.get("relative_pct")
+        rel_html = f"{rel:.1f}%" if rel is not None else "&mdash;"
+        evidence_html = (status_badge(r["evidence_status"]) if r.get("evidence_status")
+                          else '<span class="deterministic-badge">&#9670; Deterministic</span>')
+        body += f"""
+        <tr>
+          <td><span class="crit-name">{r['name']}</span><span class="crit-weight">({r['weight']:g}%)</span></td>
+          <td><div class="score-cell">{score_bar}<span class="score-num">{r['score']:g}</span></div></td>
+          <td class="num">{r['contribution']:.2f}</td>
+          <td class="num">{benchmark_html}</td>
+          <td class="num">{_gap_cell(r.get('gap'))}</td>
+          <td class="num">{rel_html}</td>
+          <td>{evidence_html}</td>
+        </tr>"""
+    return f"""
+<div class="scoring-table-wrap">
+<table class="scoring-table">
+<thead><tr>
+  <th>Criterion</th><th>Score</th><th class="num">Contribution</th>
+  <th class="num">Peer Benchmark</th><th class="num">Gap</th><th class="num">Relative %</th><th>Evidence</th>
+</tr></thead>
+<tbody>{body}</tbody>
+</table>
+</div>
+"""
