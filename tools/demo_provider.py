@@ -172,4 +172,80 @@ CANNED_RESPONSES = {
         "overall_summary": "Proposal lacks substantive content on every criterion and contains an embedded prompt-injection "
                             "attempt in its Security & Compliance section, which was detected and disregarded.",
     },
+    # --- Tie-break test trio: identical scores on every criterion (below), by
+    # design, so all three tie exactly on PPI regardless of what the rest of the
+    # batch scores. Only the metadata in content.SUGGESTED_METADATA (submission
+    # date, experience rating) differs -- that's what the tie-break cascade in
+    # ranking_tool.rank_suppliers() then resolves on a real run. Justification
+    # text differs per supplier (distinct proposals) but every score/max_score
+    # pair below is identical across the three -- that identity, not the prose,
+    # is what PPI is computed from.
+    "Keystone Digital": {
+        "supplier_name": "Keystone Digital",
+        "criteria": [
+            _c(1, 7, "strong",
+               "Conventional but adequate hybrid classification approach, validated at the RFP's "
+               "required 3x seasonal spike but not tested beyond it.",
+               [{"quote": "validated at the RFP's required 3x seasonal spike volume in a prior client deployment", "page": 1}]),
+            _c(2, 7, "strong",
+               "Reasonable phased plan; the 95-day timeline is a modest 5 days over the RFP's stated maximum.",
+               [{"quote": "Keystone proposes a 95-day transition", "page": 1}]),
+            _c(3, 7, "strong",
+               "Mid-range, clearly itemised pricing with no notable red flags.",
+               [{"quote": "Year 1 steady-state run cost: USD 80,000 per month", "page": 2}]),
+            _c(4, 8, "strong",
+               "ISO 27001 and annual SOC 2 Type II audits with standard access controls and background checks.",
+               [{"quote": "Keystone is ISO 27001:2022 certified and completes an annual SOC 2 Type II audit", "page": 2}]),
+            _c(5, 6, "moderate",
+               "One contactable reference of similar scale; adequate but not standout track record.",
+               [{"quote": "delivered two comparable service desk modernisation engagements in the past six years", "page": 2}]),
+        ],
+        "risks": ["Proposed 95-day transition timeline is 5 days over the RFP's stated 90-day maximum."],
+        "overall_summary": "Solid, conventional mid-market proposal with no major weaknesses and no standout strengths.",
+    },
+    "Atlas Networks": {
+        "supplier_name": "Atlas Networks",
+        "criteria": [
+            _c(1, 7, "strong",
+               "Cloud-native classification pipeline validated at the RFP's required 3x seasonal spike volume.",
+               [{"quote": "validated at the RFP's required 3x seasonal spike volume in our reference environment", "page": 1}]),
+            _c(2, 7, "strong",
+               "Reasonable phased plan; the 95-day timeline is a modest 5 days over the RFP's stated maximum.",
+               [{"quote": "Atlas proposes a 95-day transition", "page": 1}]),
+            _c(3, 7, "strong",
+               "Mid-range, clearly itemised pricing with no notable red flags.",
+               [{"quote": "Year 1 steady-state run cost: USD 79,000 per month", "page": 2}]),
+            _c(4, 8, "strong",
+               "ISO 27001 and annual SOC 2 Type II audits with standard access controls and background checks.",
+               [{"quote": "Atlas is ISO 27001:2022 certified and completes an annual SOC 2 Type II audit", "page": 2}]),
+            _c(5, 6, "moderate",
+               "A newer entrant to engagements of this scale; one comparable reference cited.",
+               [{"quote": "delivered one comparable service desk platform for a mid-size logistics client in the past two years", "page": 2}]),
+        ],
+        "risks": ["Shorter track record at this engagement scale than most competing bidders."],
+        "overall_summary": "Solid, cloud-native proposal matching Keystone Digital's overall competence tier with a shorter track record.",
+    },
+    "Solstice Technologies": {
+        "supplier_name": "Solstice Technologies",
+        "criteria": [
+            _c(1, 7, "strong",
+               "Classification model validated at the RFP's required 3x seasonal spike volume in a comparable prior deployment.",
+               [{"quote": "validated at the RFP's required 3x seasonal spike volume in a comparable prior deployment", "page": 1}]),
+            _c(2, 7, "strong",
+               "Reasonable phased plan; the 95-day timeline is a modest 5 days over the RFP's stated maximum.",
+               [{"quote": "Solstice proposes a 95-day transition", "page": 1}]),
+            _c(3, 7, "strong",
+               "Mid-range, clearly itemised pricing with no notable red flags.",
+               [{"quote": "Year 1 steady-state run cost: USD 81,000 per month", "page": 2}]),
+            _c(4, 8, "strong",
+               "ISO 27001 and annual SOC 2 Type II audits with standard access controls and background checks.",
+               [{"quote": "Solstice is ISO 27001:2022 certified and completes an annual SOC 2 Type II audit", "page": 2}]),
+            _c(5, 6, "moderate",
+               "One contactable reference of similar scale; adequate but not standout track record.",
+               [{"quote": "delivered two comparable engagements in the past five years", "page": 2}]),
+        ],
+        "risks": ["Proposed 95-day transition timeline is 5 days over the RFP's stated 90-day maximum."],
+        "overall_summary": "Solid, conventional mid-market proposal -- ties Keystone Digital and Atlas Networks exactly on PPI, "
+                            "but loses the tie on a later submission date.",
+    },
 }

@@ -74,15 +74,16 @@ with st.sidebar:
     demo_mode = st.checkbox(
         "Offline demo mode (no API key, no cost)",
         value=True,
-        help="Uses pre-authored, realistic evaluation results for the 5 synthetic suppliers -- "
-             "including a demonstration of the prompt-injection defense. Fully deterministic, "
-             "zero API cost. Switch this off to use a real LLM.",
+        help="Uses pre-authored, realistic evaluation results for the 8 synthetic suppliers -- "
+             "including a demonstration of the prompt-injection defense and a 3-way PPI tie "
+             "resolved by the mandatory tie-break cascade. Fully deterministic, zero API cost. "
+             "Switch this off to use a real LLM.",
     )
     if demo_mode:
         st.markdown(
             '<div class="metric-tile" style="border-left:3px solid #0ca30c;">'
             '<div class="metric-label">Mode</div>'
-            '<div class="metric-value" style="font-size:1.05rem;">\U0001F7E2 Demo Mode</div>'
+            '<div class="metric-value" style="font-size:1.05rem;"><span style="color:#0ca30c">&#9679;</span> Demo Mode</div>'
             '<div class="metric-sub">Canned, realistic results. Zero API cost.</div></div>',
             unsafe_allow_html=True,
         )
@@ -91,7 +92,7 @@ with st.sidebar:
         st.markdown(
             '<div class="metric-tile" style="border-left:3px solid #4338CA; margin-bottom:0.6rem;">'
             '<div class="metric-label">Mode</div>'
-            '<div class="metric-value" style="font-size:1.05rem;">\U0001F535 Live Mode</div>'
+            '<div class="metric-value" style="font-size:1.05rem;"><span style="color:#4338CA">&#9679;</span> Live Mode</div>'
             '<div class="metric-sub">Calls a real LLM with your key.</div></div>',
             unsafe_allow_html=True,
         )
@@ -99,7 +100,7 @@ with st.sidebar:
         model = st.text_input("Model", value=DEFAULT_MODELS[provider_name])
         api_key = st.text_input("API Key", type="password",
                                  help="Kept only in this browser session's memory -- never written to disk or the database.")
-        if st.button("Test Connection", use_container_width=True):
+        if st.button("Test Connection", icon=":material/network_check:", use_container_width=True):
             if not api_key:
                 st.error("Enter an API key first.")
             else:
@@ -149,7 +150,11 @@ with tab_criteria:
         all_criteria = repo.get_all_criteria()
         edited = {}
         for i, c in enumerate(all_criteria):
-            color = ui.supplier_color(i) if c["scoring_source"] == "llm" else "#4338CA"
+            # Keyed by criterion_id, not list position -- a criterion's color must
+            # stay fixed whether or not other criteria are active (color follows
+            # identity, never rank/position; see the "Active Weight Distribution"
+            # pie below, which must render the exact same color for the same id).
+            color = ui.stable_color_for(f"criterion-{c['criterion_id']}") if c["scoring_source"] == "llm" else "#4338CA"
             with st.container(border=True):
                 top = st.columns([3.2, 1.3, 1, 1.2])
                 source_tag = "LLM-scored" if c["scoring_source"] == "llm" else "Deterministic"
@@ -174,14 +179,16 @@ with tab_criteria:
         active_now = [c for c in repo.get_all_criteria() if c["is_active"]]
         total_now = sum(c["weight"] for c in active_now)
         if active_now:
-            colors = [ui.supplier_color(i) if c["scoring_source"] == "llm" else "#4338CA"
-                      for i, c in enumerate(active_now)]
+            colors = [ui.stable_color_for(f"criterion-{c['criterion_id']}") if c["scoring_source"] == "llm" else "#4338CA"
+                      for c in active_now]
             fig = go.Figure(go.Pie(
                 labels=[c["name"] for c in active_now], values=[c["weight"] for c in active_now],
                 hole=0.55, marker=dict(colors=colors, line=dict(color="#ffffff", width=2)),
-                textinfo="percent", textfont=dict(size=12),
+                textinfo="percent", textfont=dict(size=12), hovertemplate="%{label}: %{percent}<extra></extra>",
             ))
-            st.plotly_chart(style_fig(fig, height=260), use_container_width=True, config={"displayModeBar": False})
+            styled = style_fig(fig, height=300)
+            styled.update_layout(showlegend=True, legend=dict(orientation="h", yanchor="top", y=-0.05, font=dict(size=11)))
+            st.plotly_chart(styled, use_container_width=True, config={"displayModeBar": False})
         if abs(total_now - 100.0) > 1e-6:
             st.markdown(ui.metric_tile("Active Weight Total", f"{total_now:g}%", "Will be auto-normalized"),
                         unsafe_allow_html=True)
@@ -205,8 +212,9 @@ with tab_input:
     with colA:
         with st.container(border=True):
             st.markdown(":material/bolt: **Quick start**")
-            st.caption("Loads the buyer RFP context plus all 5 synthetic supplier PDFs (4 required + 1 adversarial).")
-            if st.button("Load synthetic demo batch", type="primary", use_container_width=True):
+            st.caption("Loads the buyer RFP context plus all 8 synthetic supplier PDFs "
+                       "(4 required + 1 adversarial + 3 tie-break test cases).")
+            if st.button("Load synthetic demo batch", icon=":material/science:", type="primary", use_container_width=True):
                 pending = []
                 for supplier in ALL_SUPPLIERS:
                     safe_name = supplier["supplier_name"].replace(" ", "_").replace(".", "")
@@ -231,7 +239,7 @@ with tab_input:
             st.markdown(":material/folder_open: **Or upload your own**")
             uploaded_files = st.file_uploader("Supplier PDFs", type=["pdf"], accept_multiple_files=True,
                                                label_visibility="collapsed")
-            if uploaded_files and st.button("Add uploaded files to batch", use_container_width=True):
+            if uploaded_files and st.button("Add uploaded files to batch", icon=":material/playlist_add:", use_container_width=True):
                 pending = list(st.session_state.pending_suppliers)
                 for uf in uploaded_files:
                     file_bytes = uf.read()
@@ -345,7 +353,7 @@ with tab_input:
     batch = st.session_state.batch
     if batch is not None and batch.status == "INCOMPLETE":
         st.divider()
-        st.markdown("#### ⚠️ Some suppliers failed evaluation")
+        st.markdown("#### :material/error: Some suppliers failed evaluation")
         failed = [s for s in batch.suppliers if s.eval_status == "FAILED"]
         succeeded = [s for s in batch.suppliers if s.eval_status == "SUCCESS"]
         st.write(f"**{len(succeeded)} succeeded, {len(failed)} failed** (out of {len(batch.suppliers)}). "
@@ -495,24 +503,27 @@ with tab_scorecards:
 
             # --- Performance summary: every scored criterion at a glance, before
             # the reader drills into any one of them (executive scan first).
-            st.markdown("#### Performance Summary")
-            summary_rows = [(r.name, r.score, r.max_score) for r in s.validated_results]
-            for d in batch.deterministic_criteria:
-                det_score, _ = orch.rt.score_incumbency(
-                    s.input.is_incumbent, s.input.incumbent_performance_rating, d["max_score"]
-                )
-                summary_rows.append((d["name"], det_score, d["max_score"]))
-            summary_rows = summary_rows[::-1]  # plotly renders bottom-up
-            fig = go.Figure(go.Bar(
-                x=[(sc / mx * 100.0) if mx else 0 for _, sc, mx in summary_rows],
-                y=[name for name, _, _ in summary_rows],
-                orientation="h", marker=dict(color=ui.SEQUENTIAL_BLUE),
-                text=[f"{sc:g}/{mx:g}" for _, sc, mx in summary_rows], textposition="outside",
-            ))
-            fig.update_xaxes(title="% of max score", range=[0, 115], gridcolor="#e1e0d9")
-            fig.update_yaxes(title="")
-            st.plotly_chart(style_fig(fig, height=70 + 42 * len(summary_rows)), use_container_width=True,
-                             config={"displayModeBar": False})
+            # Wrapped in the same bordered-card treatment as the rest of the page
+            # so it doesn't read as bare text floating between two boxed sections.
+            with st.container(border=True):
+                st.markdown("#### Performance Summary")
+                summary_rows = [(r.name, r.score, r.max_score) for r in s.validated_results]
+                for d in batch.deterministic_criteria:
+                    det_score, _ = orch.rt.score_incumbency(
+                        s.input.is_incumbent, s.input.incumbent_performance_rating, d["max_score"]
+                    )
+                    summary_rows.append((d["name"], det_score, d["max_score"]))
+                summary_rows = summary_rows[::-1]  # plotly renders bottom-up
+                fig = go.Figure(go.Bar(
+                    x=[(sc / mx * 100.0) if mx else 0 for _, sc, mx in summary_rows],
+                    y=[name for name, _, _ in summary_rows],
+                    orientation="h", marker=dict(color=ui.SEQUENTIAL_BLUE, cornerradius=4),
+                    text=[f"{sc:g}/{mx:g}" for _, sc, mx in summary_rows], textposition="outside",
+                ))
+                fig.update_xaxes(title="% of max score", range=[0, 115], gridcolor="#e1e0d9")
+                fig.update_yaxes(title="")
+                st.plotly_chart(style_fig(fig, height=70 + 42 * len(summary_rows)), use_container_width=True,
+                                 config={"displayModeBar": False})
 
             # --- Dense scoring-detail table: every criterion's numbers visible at
             # once without opening an expander (the expanders below stay for the
@@ -555,9 +566,8 @@ with tab_scorecards:
 
                     contribution = orch.rt.criterion_weighted_contribution(r.score, r.max_score, r.weight)
                     st.markdown(
-                        f"<div style='font-family:\"IBM Plex Mono\",monospace; font-size:0.82rem; "
-                        f"color:#52514e; margin:0.3rem 0 0.6rem 0'>Weighted contribution: "
-                        f"{r.score}/{r.max_score} &times; {r.weight:g}% = <strong style='color:#0b0b0b'>{contribution:.2f}</strong> "
+                        f"<div class='formula-line'>Weighted contribution: "
+                        f"{r.score}/{r.max_score} &times; {r.weight:g}% = <strong>{contribution:.2f}</strong> "
                         f"of the {s.absolute_score:.1f} absolute score</div>",
                         unsafe_allow_html=True,
                     )
@@ -581,7 +591,7 @@ with tab_scorecards:
                     if r.evidence:
                         for e in r.evidence:
                             cls = "verified" if e["verified"] else "unverified"
-                            icon = "✅" if e["verified"] else "⚠️ UNVERIFIED"
+                            icon = "&#10003;" if e["verified"] else "&#10007; UNVERIFIED"
                             st.markdown(f'<div class="evidence-quote {cls}">{icon} p.{e["page"]}: "{e["quote"]}"</div>',
                                         unsafe_allow_html=True)
                     else:
@@ -600,9 +610,8 @@ with tab_scorecards:
                         st.markdown(ui.bar(det_score, d["max_score"], color="#4338CA"), unsafe_allow_html=True)
                         contribution = orch.rt.criterion_weighted_contribution(det_score, d["max_score"], d["weight"])
                         st.markdown(
-                            f"<div style='font-family:\"IBM Plex Mono\",monospace; font-size:0.82rem; "
-                            f"color:#52514e; margin:0.3rem 0 0.6rem 0'>Weighted contribution: "
-                            f"{det_score}/{d['max_score']} &times; {d['weight']:g}% = <strong style='color:#0b0b0b'>{contribution:.2f}</strong> "
+                            f"<div class='formula-line'>Weighted contribution: "
+                            f"{det_score}/{d['max_score']} &times; {d['weight']:g}% = <strong>{contribution:.2f}</strong> "
                             f"of the {s.absolute_score:.1f} absolute score</div>",
                             unsafe_allow_html=True,
                         )

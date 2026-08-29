@@ -212,3 +212,56 @@ def test_failure_gates_ranking_with_no_override_possible(tmp_path, monkeypatch):
     orch.finalize_ranking(batch)
     assert batch.status == "INCOMPLETE"
     assert batch.suppliers[0].final_rank is None
+
+
+def test_three_way_ppi_tie_resolved_by_full_cascade(tmp_path, monkeypatch):
+    """
+    End-to-end proof that the mandatory tie-break cascade fires on a real run,
+    not just in the pure-function unit tests in test_ranking_tool.py. Uses the
+    real DemoProvider (not a stub) with the three tie-break test suppliers from
+    data/synthetic/content.py, which are given IDENTICAL canned scores so they
+    tie exactly on PPI:
+
+    - Keystone Digital and Atlas Networks share a submission date -> their tie
+      can only be broken by rule 3 (experience rating: 8 beats 3).
+    - Solstice Technologies shares the same PPI but a later submission date
+      than both -> loses the tie on rule 2 (earlier date) alone.
+    """
+    from tools.demo_provider import DemoProvider
+
+    _use_temp_db(monkeypatch, tmp_path)
+    active_criteria = repo.get_active_criteria()
+
+    def load(name):
+        safe = name.replace(" ", "_").replace(".", "")
+        path = os.path.join(os.path.dirname(__file__), "..", "data", "synthetic", f"Supplier_{safe}.pdf")
+        with open(path, "rb") as f:
+            return f.read()
+
+    supplier_inputs = [
+        orch.SupplierInput("Keystone Digital", load("Keystone Digital"), "2026-02-25", 8, False, None),
+        orch.SupplierInput("Atlas Networks", load("Atlas Networks"), "2026-02-25", 3, False, None),
+        orch.SupplierInput("Solstice Technologies", load("Solstice Technologies"), "2026-03-02", 6, False, None),
+    ]
+    batch = orch.create_batch(active_criteria, "Demo", "canned-v1", "buyer context", supplier_inputs)
+    provider = DemoProvider()
+    for s in batch.suppliers:
+        orch.run_evaluation_for_supplier(s, batch.llm_criteria, batch.buyer_context, provider)
+    assert orch.all_suppliers_succeeded(batch)
+    orch.finalize_ranking(batch)
+
+    by_name = {s.input.supplier_name: s for s in batch.suppliers}
+    keystone, atlas, solstice = by_name["Keystone Digital"], by_name["Atlas Networks"], by_name["Solstice Technologies"]
+
+    # All three tie exactly on PPI -- that's the premise the whole test rests on.
+    assert round(keystone.ppi, 4) == round(atlas.ppi, 4) == round(solstice.ppi, 4)
+
+    # Earliest date + highest experience among the tied trio -> rank 1.
+    assert keystone.final_rank == 1
+    # Same PPI and same date as Keystone -> only experience rating separates them (rule 3).
+    assert atlas.final_rank == 2
+    assert "experience rating" in atlas.tie_break_reason.lower()
+    assert "3 vs 8" in atlas.tie_break_reason
+    # Same PPI as both, but later date -> loses on rule 2 alone.
+    assert solstice.final_rank == 3
+    assert "submitted later" in solstice.tie_break_reason.lower()

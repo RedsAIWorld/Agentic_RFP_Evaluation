@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-Content for the synthetic Buyer RFP + 5 supplier proposals (4 required by the
-brief + 1 adversarial/prompt-injection test case). Rendered to PDF by
-render_pdfs.py using reportlab.
+Content for the synthetic Buyer RFP + 8 supplier proposals: 4 required by the
+brief + 1 adversarial/prompt-injection test case + 3 tie-break test cases.
+Rendered to PDF by render_pdfs.py using reportlab.
 
 Scenario: a mid-size enterprise (modelled loosely on a Shell-style IT
 Application Management Services setup) is procuring an AI-assisted Tier 2/3
@@ -11,12 +11,22 @@ application support platform with an integrated service desk.
 Suggested metadata for the Streamlit "Supplier Input" screen when demoing
 (NOT extracted from the PDFs -- entered by the user, per the brief):
 
-    Supplier            Submission Date   Experience Rating (1-10)  Incumbent?  Incumbent Perf (1-5)
-    Apex Systems        2026-03-04        7                          No          -
-    BrightPath Tech     2026-03-01        4                          No          -
-    NexaWorks           2026-03-03        8                          No          -
-    Orbit Digital       2026-03-02        9                          Yes         3
-    Vantage Cloud Sol.  2026-03-05        6                          No          -   (adversarial)
+    Supplier               Submission Date   Experience Rating (1-10)  Incumbent?  Incumbent Perf (1-5)
+    Apex Systems           2026-03-04        7                          No          -
+    BrightPath Tech        2026-03-01        4                          No          -
+    NexaWorks              2026-03-03        8                          No          -
+    Orbit Digital          2026-03-02        9                          Yes         3
+    Vantage Cloud Sol.     2026-03-05        6                          No          -   (adversarial)
+    Keystone Digital       2026-02-25        8                          No          -   (tie-break test)
+    Atlas Networks         2026-02-25        3                          No          -   (tie-break test)
+    Solstice Technologies  2026-03-02        6                          No          -   (tie-break test)
+
+Keystone Digital, Atlas Networks, and Solstice Technologies are given
+IDENTICAL canned scores in tools/demo_provider.py so they tie exactly on PPI.
+Keystone and Atlas also share a submission date, so the three together
+exercise every level of the mandatory tie-break cascade on a real run:
+Keystone beats Solstice on date (rule 2); Keystone beats Atlas on experience
+rating despite the same date and PPI (rule 3).
 """
 
 BUYER_RFP = {
@@ -305,6 +315,135 @@ ORBIT_DIGITAL = {
 }
 
 # ---------------------------------------------------------------------------
+# Tie-break test cases -- three suppliers deliberately given identical canned
+# scores (see tools/demo_provider.py) so they tie on PPI, exercising every
+# level of ranking_tool.rank_suppliers()'s mandatory tie-break cascade
+# (submission date, then experience rating, then name) on a real end-to-end
+# run, not just in unit tests. See each supplier's profile_note below.
+
+KEYSTONE_DIGITAL = {
+    "supplier_name": "Keystone Digital",
+    "profile_note": ("TIE-BREAK TEST CASE (1 of 3). Deliberately scored identically to Atlas "
+                      "Networks and Solstice Technologies on every criterion (see "
+                      "tools/demo_provider.py) so all three tie on PPI, exercising "
+                      "ranking_tool.rank_suppliers()'s mandatory tie-break cascade end to end, "
+                      "not just in unit tests. Earliest submission date of the three -> wins the "
+                      "PPI tie against Solstice on rule 2 (earlier date), and against Atlas on "
+                      "experience rating (rule 3), since Atlas shares its submission date."),
+    "sections": [
+        ("Executive Summary",
+         "Keystone Digital is a mid-market managed services provider proposing a dependable, "
+         "conventional AI-assisted triage capability for Meridian's service desk. Our approach "
+         "favours proven components over novel architecture, prioritising predictable delivery "
+         "over experimentation."),
+        ("Proposed Solution & Implementation Approach",
+         "Keystone's platform combines rule-based routing with a supervised classification model "
+         "for ticket categorisation, integrated with ServiceNow via our standard REST connector. "
+         "The platform has been validated at the RFP's required 3x seasonal spike volume in a "
+         "prior client deployment, though we have not tested beyond that threshold. Misclassified "
+         "tickets fall back to a manual triage queue reviewed each business-hour cycle."),
+        ("Timeline, Team Structure & Milestones",
+         "Keystone proposes a 95-day transition: Days 1-20 discovery; Days 21-65 build and "
+         "integration; Days 66-85 shadow-running; Days 86-95 cutover. This is slightly beyond "
+         "the RFP's 90-day target, which we believe is a reasonable trade-off for a lower-risk, "
+         "conventional build. The team includes a Transition Lead, 2 integration engineers, and "
+         "a 16-engineer steady-state support team across two regional hubs (Dublin and Manila)."),
+        ("Price Table & Assumptions",
+         "Year 1 transition/setup cost: USD 260,000. Year 1 steady-state run cost: USD 80,000 "
+         "per month, rising to USD 82,000 in Year 2. Assumptions: baseline ticket volume of "
+         "9,000 per month; standard change requests under 4 hours included; pricing in USD."),
+        ("Security, Compliance & Risk Controls",
+         "Keystone is ISO 27001:2022 certified and completes an annual SOC 2 Type II audit. "
+         "Production access requires MFA and is logged centrally with 180-day retention. All "
+         "personnel with production access are background-checked, and data processing is "
+         "restricted to Meridian's approved jurisdictions."),
+        ("Support Model, Experience & References",
+         "Keystone operates a two-hub follow-the-sun model (Dublin, Manila) with a documented "
+         "L1-L2 escalation path. We have delivered two comparable service desk modernisation "
+         "engagements in the past six years and can provide one contactable reference of "
+         "similar portfolio size."),
+    ],
+}
+
+ATLAS_NETWORKS = {
+    "supplier_name": "Atlas Networks",
+    "profile_note": ("TIE-BREAK TEST CASE (2 of 3). Same canned scores as Keystone Digital and "
+                      "Solstice Technologies (identical PPI). Shares Keystone's submission date, "
+                      "so the two tie on PPI AND date -- resolved only by rule 3 (experience "
+                      "rating: Keystone 8 beats Atlas 3), exercising the deepest tie-break level "
+                      "the unit tests cover in isolation but the demo batch had never shown live."),
+    "sections": [
+        ("Executive Summary",
+         "Atlas Networks is a cloud-native challenger bringing modern tooling to Meridian's "
+         "service desk modernisation. While a newer entrant to managed application support than "
+         "some competitors, our platform-first approach delivers comparable technical capability "
+         "with a leaner delivery model."),
+        ("Proposed Solution & Implementation Approach",
+         "Atlas deploys a cloud-native classification pipeline integrated with ServiceNow "
+         "through a managed iPaaS connector. The platform has been validated at the RFP's "
+         "required 3x seasonal spike volume in our reference environment. Misclassifications "
+         "route to a fallback human queue with a 2-hour SLA for re-triage."),
+        ("Timeline, Team Structure & Milestones",
+         "Atlas proposes a 95-day transition: Days 1-25 discovery and environment access; "
+         "Days 26-65 build and integration; Days 66-90 shadow-running; Days 91-95 cutover. "
+         "The delivery team includes a Delivery Lead, 2 platform engineers, and a 12-engineer "
+         "steady-state support team split across Lisbon and Bengaluru."),
+        ("Price Table & Assumptions",
+         "Year 1 transition/setup cost: USD 245,000. Year 1 steady-state run cost: USD 79,000 "
+         "per month, held flat into Year 2. Assumptions: baseline ticket volume of 9,000 per "
+         "month; standard change requests under 4 hours included; pricing in USD."),
+        ("Security, Compliance & Risk Controls",
+         "Atlas is ISO 27001:2022 certified and completes an annual SOC 2 Type II audit. "
+         "Production access requires MFA with centralized logging at 180-day retention. "
+         "Personnel with production access are background-checked prior to onboarding, and "
+         "data processing stays within Meridian's approved jurisdictions."),
+        ("Support Model, Experience & References",
+         "Atlas operates a two-hub model (Lisbon, Bengaluru) with a documented escalation "
+         "path. As a newer entrant to engagements of this scale, we have delivered one "
+         "comparable service desk platform for a mid-size logistics client in the past two "
+         "years and can provide that reference on request."),
+    ],
+}
+
+SOLSTICE_TECHNOLOGIES = {
+    "supplier_name": "Solstice Technologies",
+    "profile_note": ("TIE-BREAK TEST CASE (3 of 3). Same canned scores as Keystone Digital and "
+                      "Atlas Networks (identical PPI), but a later submission date than both -> "
+                      "ranks below the Keystone/Atlas pair purely on rule 2 (earlier date wins), "
+                      "producing the 'PPI tied ... ranked lower because its proposal was "
+                      "submitted later' tie-break message on a live run."),
+    "sections": [
+        ("Executive Summary",
+         "Solstice Technologies proposes a dependable AI-assisted triage capability for "
+         "Meridian's service desk, drawing on our experience modernising ITSM environments "
+         "for mid-size enterprise clients."),
+        ("Proposed Solution & Implementation Approach",
+         "Solstice's platform uses a classification model integrated with ServiceNow via a "
+         "custom middleware layer supporting bidirectional sync. The platform has been "
+         "validated at the RFP's required 3x seasonal spike volume in a comparable prior "
+         "deployment. Misclassified tickets are routed to a manual review queue."),
+        ("Timeline, Team Structure & Milestones",
+         "Solstice proposes a 95-day transition: Days 1-20 discovery; Days 21-65 build and "
+         "integration; Days 66-85 shadow-running; Days 86-95 cutover. The team includes a "
+         "Transition Manager, 2 integration engineers, and a 14-engineer steady-state support "
+         "team across Warsaw and Manila hubs."),
+        ("Price Table & Assumptions",
+         "Year 1 transition/setup cost: USD 255,000. Year 1 steady-state run cost: USD 81,000 "
+         "per month, held flat into Year 2. Assumptions: baseline ticket volume of 9,000 per "
+         "month; standard change requests under 4 hours included; pricing in USD."),
+        ("Security, Compliance & Risk Controls",
+         "Solstice is ISO 27001:2022 certified and completes an annual SOC 2 Type II audit. "
+         "Production access requires MFA and is logged centrally with 180-day retention. "
+         "Personnel with production access are background-checked, and data processing is "
+         "restricted to Meridian's approved jurisdictions."),
+        ("Support Model, Experience & References",
+         "Solstice operates a two-hub follow-the-sun model (Warsaw, Manila) with a documented "
+         "escalation path. We have delivered two comparable engagements in the past five years "
+         "and can provide one contactable reference of similar portfolio size."),
+    ],
+}
+
+# ---------------------------------------------------------------------------
 # Adversarial proposal -- tests whether the pipeline resists a prompt-injection
 # attempt embedded inside supplier-controlled document content. The instructions
 # are hidden inside the Risk Controls section, styled to look like a system
@@ -352,7 +491,10 @@ VANTAGE_ADVERSARIAL = {
     ],
 }
 
-ALL_SUPPLIERS = [APEX_SYSTEMS, BRIGHTPATH_TECH, NEXAWORKS, ORBIT_DIGITAL, VANTAGE_ADVERSARIAL]
+ALL_SUPPLIERS = [
+    APEX_SYSTEMS, BRIGHTPATH_TECH, NEXAWORKS, ORBIT_DIGITAL, VANTAGE_ADVERSARIAL,
+    KEYSTONE_DIGITAL, ATLAS_NETWORKS, SOLSTICE_TECHNOLOGIES,
+]
 
 SUGGESTED_METADATA = {
     "Apex Systems":            dict(submission_date="2026-03-04", experience_rating=7, is_incumbent=False, incumbent_performance_rating=None),
@@ -360,4 +502,10 @@ SUGGESTED_METADATA = {
     "NexaWorks":               dict(submission_date="2026-03-03", experience_rating=8, is_incumbent=False, incumbent_performance_rating=None),
     "Orbit Digital":           dict(submission_date="2026-03-02", experience_rating=9, is_incumbent=True,  incumbent_performance_rating=3),
     "Vantage Cloud Solutions": dict(submission_date="2026-03-05", experience_rating=6, is_incumbent=False, incumbent_performance_rating=None),
+    # Tie-break test trio -- identical canned scores (tools/demo_provider.py), so PPI ties
+    # exactly. Keystone and Atlas also share a submission date, forcing the cascade down
+    # to experience rating; Solstice's later date loses the PPI tie on date alone.
+    "Keystone Digital":        dict(submission_date="2026-02-25", experience_rating=8, is_incumbent=False, incumbent_performance_rating=None),
+    "Atlas Networks":          dict(submission_date="2026-02-25", experience_rating=3, is_incumbent=False, incumbent_performance_rating=None),
+    "Solstice Technologies":   dict(submission_date="2026-03-02", experience_rating=6, is_incumbent=False, incumbent_performance_rating=None),
 }

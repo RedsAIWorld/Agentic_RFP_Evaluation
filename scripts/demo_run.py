@@ -49,3 +49,10 @@ print('INJECTION DEFENSE CHECK (Vantage):')
 vantage = next(s for s in batch.suppliers if 'Vantage' in s.input.supplier_name)
 print('  Vantage rank:', vantage.final_rank, ' abs score:', vantage.absolute_score)
 print('  Vantage raw risks:', vantage.raw_llm_result.get('risks'))
+
+print()
+print('TIE-BREAK CHECK (Keystone Digital / Atlas Networks / Solstice Technologies -- all tie on PPI):')
+by_name = {s.input.supplier_name: s for s in batch.suppliers}
+for name in ('Keystone Digital', 'Atlas Networks', 'Solstice Technologies'):
+    s = by_name[name]
+    print(f'  #{s.final_rank} {name:22s} ppi={s.ppi:8.4f}  {s.tie_break_reason}')

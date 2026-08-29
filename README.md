@@ -141,6 +141,14 @@ suppliers computed as `87.49999999` and `87.50000001` would never register as
 floating-point noise rather than the business rule — this is covered by
 `tests/test_ranking_tool.py::test_tie_break_float_noise_still_ties`.
 
+This cascade is also exercised live, not just in unit tests: Keystone Digital,
+Atlas Networks, and Solstice Technologies (in the synthetic data set below) are
+given identical canned scores so they tie exactly on PPI. Keystone and Atlas
+also share a submission date, forcing the tie all the way down to rule 3
+(experience rating); Solstice's later date loses the tie on rule 2 alone. Load
+the synthetic demo batch and check the Leaderboard tab's tie-break reason text
+for all three to see every non-trivial rule fire on a real run.
+
 ## Incumbency & Transition Cost (deterministic criterion)
 
 The brief's five criteria evaluate every proposal as a standing start. Real
@@ -217,16 +225,17 @@ silent adjustment) — the run proceeds rather than blocking. See
 Streamlit Community Cloud deployments and graded demos share one risk: an
 API outage, rate limit, or missing key on the reviewer's side shouldn't make the
 whole submission undemonstrable. `tools/demo_provider.py` returns fixed,
-hand-authored, realistic evaluation JSON for the five synthetic suppliers — same
+hand-authored, realistic evaluation JSON for the eight synthetic suppliers — same
 schema a real model returns, run through the identical Validation and Ranking
 pipeline. It is what lets this README show a real leaderboard, a real caught
-hallucination, and a real resisted injection attempt with zero dependency on
-model or network availability at grading time. Untick it to use a live model.
+hallucination, a real resisted injection attempt, and a real multi-level
+tie-break resolution, with zero dependency on model or network availability at
+grading time. Untick it to use a live model.
 
 ## Synthetic test data (`data/synthetic/`)
 
 One buyer RFP (a fictional enterprise procuring an AI-assisted IT service desk
-platform) plus five supplier responses, each with a deliberately distinct profile:
+platform) plus eight supplier responses, each with a deliberately distinct profile:
 
 | Supplier | Profile |
 |---|---|
@@ -235,6 +244,9 @@ platform) plus five supplier responses, each with a deliberately distinct profil
 | NexaWorks | Balanced; strongest implementation plan; best support model and SLA regime |
 | Orbit Digital | **Incumbent**; strong relationship/references; vague technical detail; mixed recent SLA record |
 | Vantage Cloud Solutions | Adversarial test document — thin content plus an embedded prompt-injection attempt |
+| Keystone Digital | **Tie-break test.** Identical canned score to Atlas Networks & Solstice Technologies -> ties on PPI; earliest submission date of the three -> wins |
+| Atlas Networks | **Tie-break test.** Same PPI and same submission date as Keystone -> loses only on lower experience rating (rule 3) |
+| Solstice Technologies | **Tie-break test.** Same PPI as Keystone/Atlas but a later submission date -> loses on rule 2 |
 
 Regenerate with `python3 data/synthetic/render_pdfs.py`. Suggested per-supplier
 metadata (submission date, experience rating, incumbency) for manual testing is
@@ -299,7 +311,7 @@ tools/
   ranking_tool.py          ALL deterministic math — score, benchmark, PPI, rank
 db/
   schema.sql, seed.py, repository.py
-data/synthetic/           Buyer RFP + 5 supplier PDFs + authoring source (content.py)
+data/synthetic/           Buyer RFP + 8 supplier PDFs + authoring source (content.py)
 scripts/demo_run.py       Runs the full pipeline outside Streamlit (no browser needed)
 tests/                    pytest suite (15 tests)
 requirements.txt

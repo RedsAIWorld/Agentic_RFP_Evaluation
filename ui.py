@@ -69,7 +69,7 @@ def stable_color_for(key: str) -> str:
 def inject_css():
     return """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;600&display=swap');
 
 html, body, [class*="css"] { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
 
@@ -233,6 +233,27 @@ table.scoring-table tbody tr:hover td { background: var(--page); }
   border-radius: 999px; font-size: 0.74rem; font-weight: 700; color: var(--ink-secondary);
   background: var(--page); border: 1px solid var(--border); white-space: nowrap;
 }
+
+/* ---------- Formula / computed-value text (deliberately monospace --
+   distinguishes "this number was calculated" from prose) ---------- */
+.formula-line {
+  font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 0.82rem;
+  color: var(--ink-secondary); margin: 0.3rem 0 0.6rem 0;
+}
+.formula-line strong { color: var(--ink); }
+
+/* ---------- Criterion drill-down expanders (match the card language) ---------- */
+[data-testid="stExpander"] {
+  border: 1px solid var(--border) !important; border-radius: 14px !important;
+  margin-bottom: 0.55rem; overflow: hidden; background: var(--surface);
+  box-shadow: 0 1px 2px rgba(11,11,11,0.03);
+}
+[data-testid="stExpander"]:hover { border-color: rgba(79,70,229,0.25) !important; }
+[data-testid="stExpander"] summary {
+  padding: 0.7rem 1rem !important; font-weight: 600; color: var(--ink); font-size: 0.92rem;
+}
+[data-testid="stExpander"] summary:hover { background: var(--page); }
+[data-testid="stExpanderDetails"] { padding: 0.2rem 1.1rem 1rem 1.1rem !important; border-top: 1px solid var(--gridline); }
 </style>
 """
 
