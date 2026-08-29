@@ -196,13 +196,14 @@ ranks last.
 
 One automatic retry, then the failure is recorded and surfaced with a manual
 **Retry** button — no silent infinite retries. Critically, **a failure never
-discards successful work and never silently produces an incomplete-looking
-ranking**: the run status becomes `INCOMPLETE`, successful evaluations are
-cached, and ranking is gated behind either full success or an explicit
-**"Finalize with N of M"** override — which is itself recorded as a permanent,
-visible warning in the run's audit trail. This was a deliberate compromise between
-two extremes (auto-rank the survivors vs. hard-stop the whole batch and discard
-successful, already-paid-for evaluations); see `orchestrator.finalize_ranking()`.
+stops the batch and never silently produces a ranking that's missing a
+supplier**: every supplier is still evaluated regardless of another
+supplier's outcome, successful evaluations are cached, and the run status
+becomes `INCOMPLETE` if even one supplier has failed. Ranking is only ever
+computed once **every** supplier has succeeded — there is no override to force
+a partial ranking. A failed supplier is unblocked by retrying it (or by
+starting a new run without it); see `orchestrator.finalize_ranking()` and
+`orchestrator.all_suppliers_resolved()`.
 
 ## Weight validation
 
