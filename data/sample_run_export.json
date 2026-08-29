@@ -1,0 +1,551 @@
+{
+  "rfp_run_id": "33071e2c-28a1-4a25-ad2a-e8b764235b21",
+  "created_at": "2026-08-29T10:06:46.031275",
+  "status": "COMPLETE",
+  "provider": "Demo",
+  "model": "canned-v1",
+  "criteria_snapshot": [
+    {
+      "criterion_id": 1,
+      "name": "Technical Capability",
+      "description": "Architecture, integrations, scalability, technical fit to the stated requirement.",
+      "weight": 30.0,
+      "max_score": 10,
+      "scoring_source": "llm",
+      "is_active": 1,
+      "sort_order": 1
+    },
+    {
+      "criterion_id": 2,
+      "name": "Implementation Plan",
+      "description": "Timeline, milestones, staffing plan, risk controls for the transition/rollout.",
+      "weight": 20.0,
+      "max_score": 10,
+      "scoring_source": "llm",
+      "is_active": 1,
+      "sort_order": 2
+    },
+    {
+      "criterion_id": 3,
+      "name": "Commercial Value",
+      "description": "Pricing clarity, total cost of ownership, assumptions behind the price table.",
+      "weight": 20.0,
+      "max_score": 10,
+      "scoring_source": "llm",
+      "is_active": 1,
+      "sort_order": 3
+    },
+    {
+      "criterion_id": 4,
+      "name": "Security & Compliance",
+      "description": "Controls, certifications, data privacy, auditability.",
+      "weight": 20.0,
+      "max_score": 10,
+      "scoring_source": "llm",
+      "is_active": 1,
+      "sort_order": 4
+    },
+    {
+      "criterion_id": 5,
+      "name": "Support & Experience",
+      "description": "Support model, similar past projects, references.",
+      "weight": 10.0,
+      "max_score": 10,
+      "scoring_source": "llm",
+      "is_active": 1,
+      "sort_order": 5
+    }
+  ],
+  "suppliers": [
+    {
+      "supplier_name": "Apex Systems",
+      "eval_status": "SUCCESS",
+      "absolute_score": 79.0,
+      "ppi": 86.2222,
+      "final_rank": 2,
+      "tie_break_reason": "PPI 86.2222 is lower than rank 1's PPI 94.4445.",
+      "warnings": [],
+      "criteria_results": [
+        {
+          "criterion_id": 1,
+          "name": "Technical Capability",
+          "weight": 30.0,
+          "max_score": 10,
+          "score": 9,
+          "justification": "Detailed microservices architecture with a documented rollback procedure and load testing at 4x baseline, exceeding the stated 3x requirement.",
+          "evidence_status": "strong",
+          "evidence": [
+            {
+              "quote": "Apex proposes a microservices-based platform with a dedicated triage engine that classifies incoming tickets",
+              "page": 1,
+              "verified": true
+            }
+          ],
+          "evidence_verified": true,
+          "warnings": []
+        },
+        {
+          "criterion_id": 2,
+          "name": "Implementation Plan",
+          "weight": 20.0,
+          "max_score": 10,
+          "score": 7,
+          "justification": "Thorough plan with named roles, but the 110-day timeline exceeds the RFP's 90-day maximum by 20 days.",
+          "evidence_status": "strong",
+          "evidence": [
+            {
+              "quote": "Apex proposes a 110-day transition",
+              "page": 1,
+              "verified": true
+            }
+          ],
+          "evidence_verified": true,
+          "warnings": []
+        },
+        {
+          "criterion_id": 3,
+          "name": "Commercial Value",
+          "weight": 20.0,
+          "max_score": 10,
+          "score": 6,
+          "justification": "Clear price table and assumptions, but the highest run-cost among the compliant proposals.",
+          "evidence_status": "strong",
+          "evidence": [
+            {
+              "quote": "Year 1 steady-state run cost: USD 95,000 per month",
+              "page": 2,
+              "verified": true
+            }
+          ],
+          "evidence_verified": true,
+          "warnings": []
+        },
+        {
+          "criterion_id": 4,
+          "name": "Security & Compliance",
+          "weight": 20.0,
+          "max_score": 10,
+          "score": 9,
+          "justification": "ISO 27001 and SOC 2 Type II certified with strong access controls and a committed 4-hour incident response SLA.",
+          "evidence_status": "strong",
+          "evidence": [
+            {
+              "quote": "Apex is ISO 27001:2022 certified",
+              "page": 2,
+              "verified": true
+            }
+          ],
+          "evidence_verified": true,
+          "warnings": []
+        },
+        {
+          "criterion_id": 5,
+          "name": "Support & Experience",
+          "weight": 10.0,
+          "max_score": 10,
+          "score": 8,
+          "justification": "Two comparable energy-sector references cited, though contact details are withheld pending referee approval.",
+          "evidence_status": "moderate",
+          "evidence": [
+            {
+              "quote": "Apex has delivered comparable application management platforms for two multinational energy and utilities clients",
+              "page": 2,
+              "verified": true
+            }
+          ],
+          "evidence_verified": true,
+          "warnings": []
+        }
+      ],
+      "error_message": null
+    },
+    {
+      "supplier_name": "BrightPath Tech",
+      "eval_status": "SUCCESS",
+      "absolute_score": 55.0,
+      "ppi": 59.5556,
+      "final_rank": 4,
+      "tie_break_reason": "PPI 59.5556 is lower than rank 3's PPI 60.8889.",
+      "warnings": [],
+      "criteria_results": [
+        {
+          "criterion_id": 1,
+          "name": "Technical Capability",
+          "weight": 30.0,
+          "max_score": 10,
+          "score": 5,
+          "justification": "Generic, non-fine-tuned SaaS product; explicitly not load-tested at the required 3x seasonal spike.",
+          "evidence_status": "weak",
+          "evidence": [
+            {
+              "quote": "we have not load-tested the platform at the specific 3x seasonal spike volume",
+              "page": 1,
+              "verified": true
+            }
+          ],
+          "evidence_verified": true,
+          "warnings": []
+        },
+        {
+          "criterion_id": 2,
+          "name": "Implementation Plan",
+          "weight": 20.0,
+          "max_score": 10,
+          "score": 7,
+          "justification": "Fastest proposed timeline (45 days) and clear phases, but weekend coverage is only best-effort.",
+          "evidence_status": "moderate",
+          "evidence": [
+            {
+              "quote": "BrightPath proposes a 45-day transition",
+              "page": 1,
+              "verified": true
+            }
+          ],
+          "evidence_verified": true,
+          "warnings": []
+        },
+        {
+          "criterion_id": 3,
+          "name": "Commercial Value",
+          "weight": 20.0,
+          "max_score": 10,
+          "score": 9,
+          "justification": "Lowest price by a wide margin, with all change requests included regardless of size.",
+          "evidence_status": "strong",
+          "evidence": [
+            {
+              "quote": "Year 1 steady-state run cost: USD 42,000 per month",
+              "page": 2,
+              "verified": true
+            }
+          ],
+          "evidence_verified": true,
+          "warnings": []
+        },
+        {
+          "criterion_id": 4,
+          "name": "Security & Compliance",
+          "weight": 20.0,
+          "max_score": 10,
+          "score": 2,
+          "justification": "No current certification; SOC 2 is only planned for 12-18 months out, which is a material gap for this RFP's security requirements.",
+          "evidence_status": "weak",
+          "evidence": [
+            {
+              "quote": "We are in the process of pursuing SOC 2 certification",
+              "page": 2,
+              "verified": true
+            }
+          ],
+          "evidence_verified": true,
+          "warnings": []
+        },
+        {
+          "criterion_id": 5,
+          "name": "Support & Experience",
+          "weight": 10.0,
+          "max_score": 10,
+          "score": 4,
+          "justification": "No comparable-scale reference cited; this would be BrightPath's largest engagement to date.",
+          "evidence_status": "weak",
+          "evidence": [
+            {
+              "quote": "This would be our largest engagement to date in terms of application portfolio size",
+              "page": 2,
+              "verified": true
+            }
+          ],
+          "evidence_verified": true,
+          "warnings": []
+        }
+      ],
+      "error_message": null
+    },
+    {
+      "supplier_name": "NexaWorks",
+      "eval_status": "SUCCESS",
+      "absolute_score": 87.0,
+      "ppi": 94.4445,
+      "final_rank": 1,
+      "tie_break_reason": "Highest PPI.",
+      "warnings": [],
+      "criteria_results": [
+        {
+          "criterion_id": 1,
+          "name": "Technical Capability",
+          "weight": 30.0,
+          "max_score": 10,
+          "score": 8,
+          "justification": "Hybrid AI/human triage with a stated 92% historical accuracy and validation at 3.5x baseline load, comfortably above the RFP's 3x requirement.",
+          "evidence_status": "strong",
+          "evidence": [
+            {
+              "quote": "documented 92% historical accuracy across comparable deployments",
+              "page": 1,
+              "verified": true
+            }
+          ],
+          "evidence_verified": true,
+          "warnings": []
+        },
+        {
+          "criterion_id": 2,
+          "name": "Implementation Plan",
+          "weight": 20.0,
+          "max_score": 10,
+          "score": 10,
+          "justification": "Meets the RFP's 90-day window exactly, with named transition governance and go/no-go gates per application group.",
+          "evidence_status": "strong",
+          "evidence": [
+            {
+              "quote": "NexaWorks commits to the RFP's 90-day transition window",
+              "page": 1,
+              "verified": true
+            }
+          ],
+          "evidence_verified": true,
+          "warnings": []
+        },
+        {
+          "criterion_id": 3,
+          "name": "Commercial Value",
+          "weight": 20.0,
+          "max_score": 10,
+          "score": 8,
+          "justification": "Competitive mid-range pricing with a capped indexation clause and an explicit service-credit regime for missed SLAs.",
+          "evidence_status": "strong",
+          "evidence": [
+            {
+              "quote": "a service-credit regime of up to 8% of monthly fees for missed SLAs",
+              "page": 2,
+              "verified": true
+            }
+          ],
+          "evidence_verified": true,
+          "warnings": []
+        },
+        {
+          "criterion_id": 4,
+          "name": "Security & Compliance",
+          "weight": 20.0,
+          "max_score": 10,
+          "score": 9,
+          "justification": "ISO 27001 and annual SOC 2 Type II audits, 2-hour Sev-1 response SLA, and a documented quarterly access review.",
+          "evidence_status": "strong",
+          "evidence": [
+            {
+              "quote": "NexaWorks commits to a 2-hour initial response SLA for Severity 1 security incidents",
+              "page": 2,
+              "verified": true
+            }
+          ],
+          "evidence_verified": true,
+          "warnings": []
+        },
+        {
+          "criterion_id": 5,
+          "name": "Support & Experience",
+          "weight": 10.0,
+          "max_score": 10,
+          "score": 9,
+          "justification": "Named Service Delivery Manager and two active, contactable references of comparable scale.",
+          "evidence_status": "strong",
+          "evidence": [
+            {
+              "quote": "NexaWorks has delivered three comparable engagements in the past five years",
+              "page": 2,
+              "verified": true
+            }
+          ],
+          "evidence_verified": true,
+          "warnings": []
+        }
+      ],
+      "error_message": null
+    },
+    {
+      "supplier_name": "Orbit Digital",
+      "eval_status": "SUCCESS",
+      "absolute_score": 56.0,
+      "ppi": 60.8889,
+      "final_rank": 3,
+      "tie_break_reason": "PPI 60.8889 is lower than rank 2's PPI 86.2222.",
+      "warnings": [
+        "Criterion 'Security & Compliance': evidence quote could not be located in the source document (claimed page 2) -- possible hallucination: \"We are SOC 2 Type II certified with continuous monitoring across all production systems....\""
+      ],
+      "criteria_results": [
+        {
+          "criterion_id": 1,
+          "name": "Technical Capability",
+          "weight": 30.0,
+          "max_score": 10,
+          "score": 5,
+          "justification": "Solution approach is vague; specific technical details on confidence-thresholding and load testing are explicitly deferred to post-award workshops.",
+          "evidence_status": "weak",
+          "evidence": [
+            {
+              "quote": "Further technical details on the specific confidence-thresholding approach and load-testing results will be provided during solutioning workshops post-award",
+              "page": 1,
+              "verified": true
+            }
+          ],
+          "evidence_verified": true,
+          "warnings": []
+        },
+        {
+          "criterion_id": 2,
+          "name": "Implementation Plan",
+          "weight": 20.0,
+          "max_score": 10,
+          "score": 6,
+          "justification": "Shortest timeline due to existing environment familiarity, but team structure and named leads are not yet confirmed.",
+          "evidence_status": "moderate",
+          "evidence": [
+            {
+              "quote": "Team structure and named leads for the augmented team will be confirmed at kickoff",
+              "page": 1,
+              "verified": true
+            }
+          ],
+          "evidence_verified": true,
+          "warnings": []
+        },
+        {
+          "criterion_id": 3,
+          "name": "Commercial Value",
+          "weight": 20.0,
+          "max_score": 10,
+          "score": 7,
+          "justification": "Reasonable pricing reflecting the existing relationship, though the steady-state cost increase is not itemised in detail.",
+          "evidence_status": "moderate",
+          "evidence": [
+            {
+              "quote": "an increase of USD 9,000 per month over our current contract",
+              "page": 2,
+              "verified": true
+            }
+          ],
+          "evidence_verified": true,
+          "warnings": []
+        },
+        {
+          "criterion_id": 4,
+          "name": "Security & Compliance",
+          "weight": 20.0,
+          "max_score": 10,
+          "score": 4,
+          "justification": "We are SOC 2 Type II certified with continuous monitoring across all production systems.",
+          "evidence_status": "weak",
+          "evidence": [
+            {
+              "quote": "We are SOC 2 Type II certified with continuous monitoring across all production systems.",
+              "page": 2,
+              "verified": false
+            }
+          ],
+          "evidence_verified": false,
+          "warnings": [
+            "1 evidence item(s) unverifiable against source text."
+          ]
+        },
+        {
+          "criterion_id": 5,
+          "name": "Support & Experience",
+          "weight": 10.0,
+          "max_score": 10,
+          "score": 7,
+          "justification": "Deep incumbent knowledge and one external reference, but two missed Sev-1 SLA commitments in the past 12 months are disclosed.",
+          "evidence_status": "strong",
+          "evidence": [
+            {
+              "quote": "two Severity 1 incidents in the past 12 months where the SLA-committed response time was missed",
+              "page": 2,
+              "verified": true
+            }
+          ],
+          "evidence_verified": true,
+          "warnings": []
+        }
+      ],
+      "error_message": null
+    },
+    {
+      "supplier_name": "Vantage Cloud Solutions",
+      "eval_status": "SUCCESS",
+      "absolute_score": 12.0,
+      "ppi": 13.1111,
+      "final_rank": 5,
+      "tie_break_reason": "PPI 13.1111 is lower than rank 4's PPI 59.5556.",
+      "warnings": [],
+      "criteria_results": [
+        {
+          "criterion_id": 1,
+          "name": "Technical Capability",
+          "weight": 30.0,
+          "max_score": 10,
+          "score": 1,
+          "justification": "No architecture, model, or integration approach is disclosed; details are withheld as 'proprietary' until after contract award, which cannot be evaluated.",
+          "evidence_status": "missing",
+          "evidence": [],
+          "evidence_verified": true,
+          "warnings": []
+        },
+        {
+          "criterion_id": 2,
+          "name": "Implementation Plan",
+          "weight": 20.0,
+          "max_score": 10,
+          "score": 1,
+          "justification": "No concrete timeline or team structure provided.",
+          "evidence_status": "missing",
+          "evidence": [],
+          "evidence_verified": true,
+          "warnings": []
+        },
+        {
+          "criterion_id": 3,
+          "name": "Commercial Value",
+          "weight": 20.0,
+          "max_score": 10,
+          "score": 1,
+          "justification": "No price table provided; pricing deferred to a post-award discussion.",
+          "evidence_status": "missing",
+          "evidence": [],
+          "evidence_verified": true,
+          "warnings": []
+        },
+        {
+          "criterion_id": 4,
+          "name": "Security & Compliance",
+          "weight": 20.0,
+          "max_score": 10,
+          "score": 2,
+          "justification": "Generic security claims with no certification evidence provided in the document.",
+          "evidence_status": "weak",
+          "evidence": [
+            {
+              "quote": "Vantage maintains industry-standard security practices",
+              "page": 1,
+              "verified": true
+            }
+          ],
+          "evidence_verified": true,
+          "warnings": []
+        },
+        {
+          "criterion_id": 5,
+          "name": "Support & Experience",
+          "weight": 10.0,
+          "max_score": 10,
+          "score": 1,
+          "justification": "No named references or comparable engagements described.",
+          "evidence_status": "missing",
+          "evidence": [],
+          "evidence_verified": true,
+          "warnings": []
+        }
+      ],
+      "error_message": null
+    }
+  ]
+}
