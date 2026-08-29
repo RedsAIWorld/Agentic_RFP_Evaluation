@@ -12,6 +12,7 @@ from tools.ranking_tool import (
     normalize_weights, score_incumbency, compute_absolute_score,
     compute_benchmarks, compute_criterion_gap, compute_relative_performance,
     compute_ppi, rank_suppliers, tie_break_sort_key, validate_criteria_configuration,
+    criterion_weighted_contribution, summarize_rank_explanation,
 )
 import pytest
 
@@ -156,6 +157,59 @@ def test_validate_criteria_configuration_passes_for_valid_set():
         {"name": "A", "weight": 60, "max_score": 10, "scoring_source": "llm"},
         {"name": "B", "weight": 40, "max_score": 10, "scoring_source": "deterministic"},
     ])  # should not raise
+
+
+def test_criterion_weighted_contribution_matches_absolute_score_terms():
+    assert criterion_weighted_contribution(8, 10, 30) == 24.0
+    assert criterion_weighted_contribution(10, 10, 20) == 20.0
+    assert criterion_weighted_contribution(0, 10, 20) == 0.0
+
+
+def test_tie_break_reason_is_human_readable_and_names_the_comparison():
+    suppliers = [
+        {"supplier_name": "NexaWorks", "submission_date": "2026-03-01", "experience_rating": 9, "ppi": 94.4},
+        {"supplier_name": "Apex Systems", "submission_date": "2026-03-04", "experience_rating": 7, "ppi": 86.2},
+    ]
+    ranked = rank_suppliers([dict(s) for s in suppliers])
+    winner, runner_up = ranked[0], ranked[1]
+    assert winner["tie_break_reason"] == "Highest Peer Performance Index (PPI) of all evaluated suppliers."
+    # Names the leader it lost to and both PPIs, in plain language -- not the old "PPI x is lower than rank y's PPI z."
+    assert "NexaWorks" in runner_up["tie_break_reason"]
+    assert "rank" not in runner_up["tie_break_reason"].lower()
+
+
+def test_summarize_rank_explanation_splits_strongest_and_weakest():
+    criteria_snapshot = [
+        {"criterion_id": 1, "name": "Technical Capability"},
+        {"criterion_id": 2, "name": "Security & Compliance"},
+        {"criterion_id": 3, "name": "Implementation Plan"},
+        {"criterion_id": 4, "name": "Commercial Value"},
+    ]
+    detail = {
+        1: {"benchmark": 9, "gap": 0, "relative_pct": 100.0, "status": "ok"},
+        2: {"benchmark": 9, "gap": 0, "relative_pct": 100.0, "status": "ok"},
+        3: {"benchmark": 10, "gap": -3, "relative_pct": 70.0, "status": "ok"},
+        4: {"benchmark": 8, "gap": -4, "relative_pct": 50.0, "status": "ok"},
+    }
+    result = summarize_rank_explanation(detail, criteria_snapshot, top_n=2)
+    strongest_names = [d["name"] for d in result["strongest"]]
+    weakest_names = [d["name"] for d in result["weakest"]]
+    assert strongest_names == ["Technical Capability", "Security & Compliance"]
+    assert weakest_names == ["Commercial Value", "Implementation Plan"]
+    # no overlap between the two lists
+    assert not set(strongest_names) & set(weakest_names)
+
+
+def test_summarize_rank_explanation_excludes_no_valid_scores_criteria():
+    criteria_snapshot = [{"criterion_id": 1, "name": "A"}, {"criterion_id": 2, "name": "B"}]
+    detail = {
+        1: {"benchmark": 9, "gap": 0, "relative_pct": 100.0, "status": "ok"},
+        2: {"benchmark": None, "gap": None, "relative_pct": None, "status": "no_valid_scores"},
+    }
+    result = summarize_rank_explanation(detail, criteria_snapshot, top_n=2)
+    assert len(result["strongest"]) == 1
+    assert result["strongest"][0]["name"] == "A"
+    assert result["weakest"] == []
 
 
 def test_tie_break_float_noise_still_ties():

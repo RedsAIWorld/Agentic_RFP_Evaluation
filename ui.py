@@ -153,7 +153,9 @@ html, body, [class*="css"] { font-family: 'Inter', system-ui, -apple-system, san
   padding: 0.85rem 1rem; text-align: left;
 }
 .metric-label { color: var(--ink-muted); font-size: 0.72rem; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.2rem; }
+  text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.2rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  text-align: left !important; text-justify: auto; word-spacing: normal; }
 .metric-value { color: var(--ink); font-size: 1.5rem; font-weight: 800; line-height: 1.1; }
 .metric-sub { color: var(--ink-secondary); font-size: 0.82rem; margin-top: 0.15rem; }
 

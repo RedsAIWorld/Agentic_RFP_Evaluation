@@ -12,12 +12,14 @@ import datetime as dt
 
 import streamlit as st
 import plotly.graph_objects as go
+import pandas as pd
 
 from db.seed import init_db
 from db import repository as repo
 import orchestrator as orch
 from tools.llm_providers import get_provider, LLMError, DEFAULT_MODELS, PROVIDERS
 from tools.demo_provider import DemoProvider
+from tools.document_tool import extract_pdf
 from data.synthetic.content import BUYER_RFP, ALL_SUPPLIERS, SUGGESTED_METADATA
 import ui
 
@@ -60,7 +62,7 @@ st.markdown(
         "ProcureIQ",
         "Agentic RFP Evaluation &amp; Supplier Ranking &mdash; an LLM reads and judges "
         "each proposal; Python owns every score, benchmark, and rank, end to end.",
-        ["\U0001F4C4 Extract", "\U0001F916 Score (LLM)", "✅ Validate", "\U0001F3C6 Rank (deterministic)"],
+        ["Extract", "Score (LLM)", "Validate", "Rank (deterministic)"],
     ),
     unsafe_allow_html=True,
 )
@@ -69,7 +71,7 @@ st.markdown(
 # Sidebar -- AI Configuration (BYOK)
 # ---------------------------------------------------------------------------
 with st.sidebar:
-    st.markdown("### ⚙️ AI Configuration")
+    st.markdown("### :material/settings: AI Configuration")
     demo_mode = st.checkbox(
         "Offline demo mode (no API key, no cost)",
         value=True,
@@ -111,7 +113,7 @@ with st.sidebar:
 
     st.divider()
     if st.session_state.batch is not None:
-        if st.button("\U0001F504 Start a new run", use_container_width=True):
+        if st.button("Start a new run", icon=":material/restart_alt:", use_container_width=True):
             st.session_state.batch = None
             st.session_state.pending_suppliers = []
             st.rerun()
@@ -127,8 +129,9 @@ def get_active_provider():
 # Tabs
 # ---------------------------------------------------------------------------
 tab_criteria, tab_input, tab_leaderboard, tab_scorecards, tab_run = st.tabs(
-    ["\U0001F4CA  Criteria", "\U0001F4E5  Supplier Input & Evaluate", "\U0001F3C6  Leaderboard",
-     "\U0001F50D  Detailed Scorecards", "\U0001F4C4  Run Details"]
+    [":material/bar_chart:  Criteria", ":material/upload_file:  Supplier Input & Evaluate",
+     ":material/leaderboard:  Leaderboard", ":material/fact_check:  Detailed Scorecards",
+     ":material/description:  Run Details"]
 )
 
 # ---------------------------------------------------------------------------
@@ -141,8 +144,8 @@ with tab_criteria:
         st.markdown("#### Evaluation Criteria")
         st.caption(
             "Criteria live entirely in SQLite -- nothing here is hardcoded in the prompt or scoring "
-            "code. Toggling **Incumbency & Transition Cost** on deliberately pushes active weights to "
-            "110%; the Ranking Tool auto-normalizes with a visible warning at the next Evaluate."
+            "code. Active criteria weights should total 100%; if they don't, they're automatically "
+            "normalized proportionally and you'll see a warning before ranking runs."
         )
         all_criteria = repo.get_all_criteria()
         edited = {}
@@ -150,7 +153,7 @@ with tab_criteria:
             color = ui.supplier_color(i) if c["scoring_source"] == "llm" else "#4338CA"
             with st.container(border=True):
                 top = st.columns([3.2, 1.3, 1, 1.2])
-                source_tag = "\U0001F916 LLM-scored" if c["scoring_source"] == "llm" else "⚙️ Deterministic"
+                source_tag = "LLM-scored" if c["scoring_source"] == "llm" else "Deterministic"
                 top[0].markdown(f"**{c['name']}**  \n<span style='color:#898781;font-size:0.8rem'>{source_tag}</span>",
                                  unsafe_allow_html=True)
                 new_weight = top[1].number_input("Weight %", min_value=0.0, max_value=100.0, value=float(c["weight"]),
@@ -161,7 +164,7 @@ with tab_criteria:
                 st.caption(c["description"])
                 edited[c["criterion_id"]] = (new_weight, new_active)
 
-        if st.button("\U0001F4BE Save criteria changes", type="primary"):
+        if st.button("Save criteria changes", icon=":material/save:", type="primary"):
             for cid, (w, a) in edited.items():
                 repo.update_criterion(cid, weight=w, is_active=a)
             st.success("Saved. Active weights are re-validated and normalized (if needed) at the next Evaluate.")
@@ -181,10 +184,16 @@ with tab_criteria:
             ))
             st.plotly_chart(style_fig(fig, height=260), use_container_width=True, config={"displayModeBar": False})
         if abs(total_now - 100.0) > 1e-6:
-            st.markdown(ui.metric_tile("Active Weight Total", f"{total_now:g}%", "⚠️ Will be auto-normalized"),
+            st.markdown(ui.metric_tile("Active Weight Total", f"{total_now:g}%", "Will be auto-normalized"),
                         unsafe_allow_html=True)
+            st.warning(
+                f"Active criteria currently total **{total_now:g}%**, not 100%. This is not an error -- "
+                f"weights are automatically normalized proportionally to 100% the next time you evaluate, "
+                f"and the exact adjustment is recorded as a warning on that run. Adjust the weights below "
+                f"if this wasn't intentional."
+            )
         else:
-            st.markdown(ui.metric_tile("Active Weight Total", f"{total_now:g}%", "✅ OK"), unsafe_allow_html=True)
+            st.markdown(ui.metric_tile("Active Weight Total", f"{total_now:g}%", "OK"), unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
 # TAB 2: Supplier Input & Evaluate
@@ -196,7 +205,7 @@ with tab_input:
     colA, colB = st.columns(2)
     with colA:
         with st.container(border=True):
-            st.markdown("**⚡ Quick start**")
+            st.markdown(":material/bolt: **Quick start**")
             st.caption("Loads the buyer RFP context plus all 5 synthetic supplier PDFs (4 required + 1 adversarial).")
             if st.button("Load synthetic demo batch", type="primary", use_container_width=True):
                 pending = []
@@ -206,29 +215,34 @@ with tab_input:
                     with open(path, "rb") as f:
                         file_bytes = f.read()
                     meta = SUGGESTED_METADATA[supplier["supplier_name"]]
+                    extraction = extract_pdf(file_bytes, supplier["supplier_name"])
                     pending.append({
                         "name": supplier["supplier_name"], "bytes": file_bytes,
                         "submission_date": meta["submission_date"],
                         "experience_rating": meta["experience_rating"],
                         "is_incumbent": meta["is_incumbent"],
                         "incumbent_performance_rating": meta["incumbent_performance_rating"],
+                        "pdf_usable": extraction.is_usable, "pdf_warning": extraction.warning,
                     })
                 st.session_state.pending_suppliers = pending
                 st.success(f"Loaded {len(pending)} synthetic suppliers.")
 
     with colB:
         with st.container(border=True):
-            st.markdown("**\U0001F4C1 Or upload your own**")
+            st.markdown(":material/folder_open: **Or upload your own**")
             uploaded_files = st.file_uploader("Supplier PDFs", type=["pdf"], accept_multiple_files=True,
                                                label_visibility="collapsed")
             if uploaded_files and st.button("Add uploaded files to batch", use_container_width=True):
                 pending = list(st.session_state.pending_suppliers)
                 for uf in uploaded_files:
+                    file_bytes = uf.read()
+                    extraction = extract_pdf(file_bytes, os.path.splitext(uf.name)[0])
                     pending.append({
-                        "name": os.path.splitext(uf.name)[0], "bytes": uf.read(),
+                        "name": os.path.splitext(uf.name)[0], "bytes": file_bytes,
                         "submission_date": dt.date.today().isoformat(),
                         "experience_rating": 5, "is_incumbent": False,
                         "incumbent_performance_rating": None,
+                        "pdf_usable": extraction.is_usable, "pdf_warning": extraction.warning,
                     })
                 st.session_state.pending_suppliers = pending
                 st.rerun()
@@ -238,10 +252,16 @@ with tab_input:
         for i, s in enumerate(st.session_state.pending_suppliers):
             color = ui.supplier_color(i)
             badge = ' <span class="status-badge" style="background:#4338CA">⭐ Incumbent</span>' if s["is_incumbent"] else ""
+            if s.get("pdf_usable") is False:
+                badge += ' <span class="status-badge" style="background:#d03b3b">⚠ PDF flagged</span>'
             with st.container(border=True):
                 head = st.columns([0.5, 4])
                 head[0].markdown(ui.avatar(s["name"], color), unsafe_allow_html=True)
                 head[1].markdown(f"**{s['name']}**{badge}", unsafe_allow_html=True)
+                if s.get("pdf_usable") is False:
+                    st.caption(f"⚠ {s.get('pdf_warning') or 'This PDF may not have a usable text layer.'} "
+                               f"It will still be submitted for evaluation, which will record it as a "
+                               f"failed extraction rather than skip it silently.")
                 c1, c2, c3, c4 = st.columns(4)
                 s["submission_date"] = c1.date_input("Submission date", value=dt.date.fromisoformat(s["submission_date"]),
                                                       key=f"date_{i}").isoformat()
@@ -253,13 +273,37 @@ with tab_input:
                 else:
                     s["incumbent_performance_rating"] = None
 
+        # --- Batch readiness summary -- makes "I've assembled my batch" explicit
+        # before Evaluate, instead of jumping straight from a list of cards to a button.
+        pending = st.session_state.pending_suppliers
+        n_total = len(pending)
+        n_valid_pdfs = sum(1 for s in pending if s.get("pdf_usable") is not False)
+        n_metadata_ok = sum(
+            1 for s in pending
+            if s.get("submission_date") and s.get("experience_rating") is not None
+            and (not s["is_incumbent"] or s.get("incumbent_performance_rating") is not None)
+        )
+        n_ready = sum(
+            1 for s in pending
+            if s.get("pdf_usable") is not False and s.get("submission_date")
+            and (not s["is_incumbent"] or s.get("incumbent_performance_rating") is not None)
+        )
+        rc1, rc2, rc3, rc4 = st.columns(4)
+        rc1.markdown(ui.metric_tile("Suppliers", str(n_total)), unsafe_allow_html=True)
+        rc2.markdown(ui.metric_tile("Valid PDFs", f"{n_valid_pdfs}/{n_total}"), unsafe_allow_html=True)
+        rc3.markdown(ui.metric_tile("Metadata", f"{n_metadata_ok}/{n_total}"), unsafe_allow_html=True)
+        rc4.markdown(ui.metric_tile("Ready to Evaluate", f"{n_ready}/{n_total}"), unsafe_allow_html=True)
+        if n_ready < n_total:
+            st.caption("Flagged proposals are still submitted -- the pipeline is designed to record an "
+                       "unusable PDF as an explicit evaluation failure rather than silently drop it.")
+
         col_clear, col_eval = st.columns([1, 3])
         with col_clear:
-            if st.button("\U0001F5D1️ Clear batch", use_container_width=True):
+            if st.button("Clear batch", icon=":material/delete:", use_container_width=True):
                 st.session_state.pending_suppliers = []
                 st.rerun()
         with col_eval:
-            if st.button("▶ Evaluate Batch", type="primary", use_container_width=True):
+            if st.button("Evaluate Batch", icon=":material/play_arrow:", type="primary", use_container_width=True):
                 active_criteria = repo.get_active_criteria()
                 supplier_inputs = [
                     orch.SupplierInput(
@@ -310,7 +354,7 @@ with tab_input:
                  f"override. Retry each failed supplier below to unblock the ranking.")
         for s in failed:
             st.error(f"**{s.input.supplier_name}**: {s.error_message}")
-            if st.button(f"Retry {s.input.supplier_name}", key=f"retry_{s.input.supplier_name}"):
+            if st.button(f"Retry {s.input.supplier_name}", icon=":material/refresh:", key=f"retry_{s.input.supplier_name}"):
                 provider = get_active_provider()
                 orch.retry_supplier(batch, s.input.supplier_name, provider)
                 orch.finalize_ranking(batch)
@@ -340,6 +384,11 @@ with tab_leaderboard:
         if not ranked:
             st.info("No finalized ranking yet for this run.")
         else:
+            st.caption(
+                "**PPI** (Peer Performance Index) is each supplier's overall score expressed relative to "
+                "the best score peers achieved on each criterion this run -- 100 means it matched or led "
+                "the field everywhere; PPI decides the ranking before any tie-break rule applies."
+            )
             st.markdown("####")
             colors = {s.input.supplier_name: ui.supplier_color(i) for i, s in enumerate(batch.suppliers)}
             fig = go.Figure(go.Bar(
@@ -371,10 +420,11 @@ with tab_leaderboard:
   </div>
   <div style="text-align:right; min-width:70px">
     <div style="font-weight:700">{s.absolute_score:.1f}</div>
-    <div style="color:#898781; font-size:0.75rem">Abs. score</div>
+    <div style="color:#898781; font-size:0.75rem">Absolute Score</div>
   </div>
 </div>
 """, unsafe_allow_html=True)
+            st.caption("For the deterministic reasoning behind any supplier's rank, see its scorecard on the Detailed Scorecards tab.")
 
 # ---------------------------------------------------------------------------
 # TAB 4: Detailed Scorecards
@@ -394,28 +444,140 @@ with tab_scorecards:
             idx = batch.suppliers.index(s)
             color = ui.supplier_color(idx)
 
-            head = st.columns([0.6, 3, 1, 1, 1])
+            head = st.columns([0.6, 2.5, 1, 1, 1.4])
             head[0].markdown(f'<div style="font-size:2.2rem">{ui.avatar(s.input.supplier_name, color)}</div>',
                               unsafe_allow_html=True)
             head[1].markdown(f"### {s.input.supplier_name}")
             if s.final_rank:
                 head[2].markdown(ui.metric_tile("Rank", f"#{s.final_rank}"), unsafe_allow_html=True)
                 head[3].markdown(ui.metric_tile("PPI", f"{s.ppi:.2f}"), unsafe_allow_html=True)
-                head[4].markdown(ui.metric_tile("Abs. Score", f"{s.absolute_score:.1f}"), unsafe_allow_html=True)
+                head[4].markdown(ui.metric_tile("Absolute Score", f"{s.absolute_score:.1f}"), unsafe_allow_html=True)
             if s.tie_break_reason:
                 st.caption(s.tie_break_reason)
 
-            st.markdown("#### \U0001F916 LLM-Scored Criteria")
-            for r in s.validated_results:
+            # --- Why did this supplier rank here? Deterministic, computed entirely
+            # from already-persisted numbers (ranking_tool.summarize_rank_explanation) --
+            # co-located with its scorecard rather than the Leaderboard rank row.
+            if s.final_rank:
+                ranked_all = sorted((x for x in succeeded if x.final_rank), key=lambda x: x.final_rank)
+                leader = ranked_all[0] if ranked_all else s
                 with st.container(border=True):
+                    st.markdown(f"#### :material/trophy: Why {s.input.supplier_name} Ranked #{s.final_rank}")
+                    explanation = orch.rt.summarize_rank_explanation(s.criterion_scoring_detail, batch.criteria_snapshot)
+                    ec1, ec2 = st.columns(2)
+                    ec1.markdown(ui.metric_tile("PPI", f"{s.ppi:.2f}"), unsafe_allow_html=True)
+                    if s is leader:
+                        ec2.markdown(ui.metric_tile("Compared with #1", "Top-ranked supplier"), unsafe_allow_html=True)
+                    else:
+                        gap_to_leader = orch.rt.compute_criterion_gap(s.ppi, leader.ppi)
+                        ec2.markdown(
+                            ui.metric_tile("Compared with #1", f"{gap_to_leader:+.2f} pts", f"vs. {leader.input.supplier_name}"),
+                            unsafe_allow_html=True,
+                        )
+                    sc1, sc2 = st.columns(2)
+                    with sc1:
+                        st.markdown("**Strongest areas**")
+                        if explanation["strongest"]:
+                            for d in explanation["strongest"]:
+                                st.markdown(f"✓ {d['name']} <span style='color:#898781'>({d['relative_pct']:.0f}% of peer benchmark)</span>",
+                                            unsafe_allow_html=True)
+                        else:
+                            st.caption("No benchmarked criteria available.")
+                    with sc2:
+                        st.markdown("**Largest peer gaps**")
+                        if explanation["weakest"]:
+                            for d in explanation["weakest"]:
+                                st.markdown(f"↓ {d['name']} <span style='color:#898781'>({d['relative_pct']:.0f}% of peer benchmark)</span>",
+                                            unsafe_allow_html=True)
+                        else:
+                            st.caption("No gaps -- matched the peer benchmark everywhere scored.")
+                    st.markdown("**Ranking rule used**")
+                    st.caption(s.tie_break_reason or "—")
+
+            # --- Performance summary: every scored criterion at a glance, before
+            # the reader drills into any one of them (executive scan first).
+            st.markdown("#### Performance Summary")
+            summary_rows = [(r.name, r.score, r.max_score) for r in s.validated_results]
+            for d in batch.deterministic_criteria:
+                det_score, _ = orch.rt.score_incumbency(
+                    s.input.is_incumbent, s.input.incumbent_performance_rating, d["max_score"]
+                )
+                summary_rows.append((d["name"], det_score, d["max_score"]))
+            summary_rows = summary_rows[::-1]  # plotly renders bottom-up
+            fig = go.Figure(go.Bar(
+                x=[(sc / mx * 100.0) if mx else 0 for _, sc, mx in summary_rows],
+                y=[name for name, _, _ in summary_rows],
+                orientation="h", marker=dict(color=ui.SEQUENTIAL_BLUE),
+                text=[f"{sc:g}/{mx:g}" for _, sc, mx in summary_rows], textposition="outside",
+            ))
+            fig.update_xaxes(title="% of max score", range=[0, 115], gridcolor="#e1e0d9")
+            fig.update_yaxes(title="")
+            st.plotly_chart(style_fig(fig, height=70 + 42 * len(summary_rows)), use_container_width=True,
+                             config={"displayModeBar": False})
+
+            # --- Dense scoring-detail table: every criterion's numbers visible at
+            # once without opening an expander (the expanders below stay for the
+            # justification text and evidence quotes, which don't fit a table cell).
+            st.markdown("#### Scoring Detail")
+            table_rows = []
+            for r in s.validated_results:
+                detail = s.criterion_scoring_detail.get(r.criterion_id) or {}
+                contribution = orch.rt.criterion_weighted_contribution(r.score, r.max_score, r.weight)
+                table_rows.append({
+                    "Criterion": f"{r.name} ({r.weight:g}%)",
+                    "LLM Score": r.score,
+                    "Weighted Contribution": contribution,
+                    "Peer Benchmark": detail.get("benchmark"),
+                    "Gap": detail.get("gap"),
+                    "Relative %": detail.get("relative_pct"),
+                    "Evidence": (r.evidence_status or "missing").title(),
+                })
+            for d in batch.deterministic_criteria:
+                det_score, _ = orch.rt.score_incumbency(
+                    s.input.is_incumbent, s.input.incumbent_performance_rating, d["max_score"]
+                )
+                detail = s.criterion_scoring_detail.get(d["criterion_id"]) or {}
+                contribution = orch.rt.criterion_weighted_contribution(det_score, d["max_score"], d["weight"])
+                table_rows.append({
+                    "Criterion": f"{d['name']} ({d['weight']:g}%)",
+                    "LLM Score": det_score,
+                    "Weighted Contribution": contribution,
+                    "Peer Benchmark": detail.get("benchmark"),
+                    "Gap": detail.get("gap"),
+                    "Relative %": detail.get("relative_pct"),
+                    "Evidence": "Deterministic",
+                })
+            st.dataframe(
+                pd.DataFrame(table_rows), hide_index=True, use_container_width=True,
+                column_config={
+                    "LLM Score": st.column_config.ProgressColumn("Score", min_value=0, max_value=10, format="%d"),
+                    "Weighted Contribution": st.column_config.NumberColumn("Contribution", format="%.2f"),
+                    "Peer Benchmark": st.column_config.NumberColumn(format="%g"),
+                    "Gap": st.column_config.NumberColumn(format="%+g"),
+                    "Relative %": st.column_config.NumberColumn(format="%.1f%%"),
+                },
+            )
+            st.caption(f"Total: {s.absolute_score:.2f} absolute score  ·  {s.ppi:.2f} PPI. "
+                       f"Peer benchmark is the highest valid score any evaluated supplier achieved on that criterion this run.")
+
+            st.markdown("#### :material/smart_toy: LLM-Scored Criteria")
+            st.caption("Expand a criterion for its evidence, benchmark, and weighted contribution to the absolute score.")
+            for r in s.validated_results:
+                detail = s.criterion_scoring_detail.get(r.criterion_id)
+                with st.expander(f"{r.name}  ·  {r.score}/{r.max_score}  ·  weight {r.weight:g}%"):
                     top = st.columns([3, 1.3])
-                    top[0].markdown(f"**{r.name}**  <span style='color:#898781'>&middot; weight {r.weight:g}%</span>",
-                                     unsafe_allow_html=True)
+                    top[0].markdown(ui.bar(r.score, r.max_score, color=ui.SEQUENTIAL_BLUE), unsafe_allow_html=True)
                     top[1].markdown(ui.status_badge(r.evidence_status), unsafe_allow_html=True)
-                    st.markdown(ui.bar(r.score, r.max_score, color=ui.SEQUENTIAL_BLUE), unsafe_allow_html=True)
-                    st.markdown(f"<div style='text-align:right; font-weight:700; margin-top:2px'>{r.score}/{r.max_score}</div>",
-                                unsafe_allow_html=True)
-                    detail = s.criterion_scoring_detail.get(r.criterion_id)
+
+                    contribution = orch.rt.criterion_weighted_contribution(r.score, r.max_score, r.weight)
+                    st.markdown(
+                        f"<div style='font-family:\"IBM Plex Mono\",monospace; font-size:0.82rem; "
+                        f"color:#52514e; margin:0.3rem 0 0.6rem 0'>Weighted contribution: "
+                        f"{r.score}/{r.max_score} &times; {r.weight:g}% = <strong style='color:#0b0b0b'>{contribution:.2f}</strong> "
+                        f"of the {s.absolute_score:.1f} absolute score</div>",
+                        unsafe_allow_html=True,
+                    )
+
                     if detail and detail["status"] == "ok":
                         gap_color = "#0ca30c" if detail["gap"] >= 0 else "#d03b3b"
                         gap_sign = "+" if detail["gap"] >= 0 else ""
@@ -428,7 +590,10 @@ with tab_scorecards:
                         )
                     elif detail:
                         st.caption("Excluded from peer benchmarking this run (no supplier had a valid score on this criterion).")
+
+                    st.markdown("**Why this score**")
                     st.write(r.justification)
+                    st.markdown("**Evidence**")
                     if r.evidence:
                         for e in r.evidence:
                             cls = "verified" if e["verified"] else "unverified"
@@ -441,16 +606,22 @@ with tab_scorecards:
                         st.warning(w)
 
             if batch.deterministic_criteria:
-                st.markdown("#### ⚙️ Deterministic Criteria (not scored by the LLM)")
+                st.markdown("#### :material/settings: Deterministic Criteria (not scored by the LLM)")
                 for d in batch.deterministic_criteria:
                     det_score, det_reason = orch.rt.score_incumbency(
                         s.input.is_incumbent, s.input.incumbent_performance_rating, d["max_score"]
                     )
-                    with st.container(border=True):
-                        st.markdown(f"**{d['name']}**  <span style='color:#898781'>&middot; weight {d['weight']:g}%</span>",
-                                    unsafe_allow_html=True)
+                    det_detail = s.criterion_scoring_detail.get(d["criterion_id"])
+                    with st.expander(f"{d['name']}  ·  {det_score}/{d['max_score']}  ·  weight {d['weight']:g}%"):
                         st.markdown(ui.bar(det_score, d["max_score"], color="#4338CA"), unsafe_allow_html=True)
-                        det_detail = s.criterion_scoring_detail.get(d["criterion_id"])
+                        contribution = orch.rt.criterion_weighted_contribution(det_score, d["max_score"], d["weight"])
+                        st.markdown(
+                            f"<div style='font-family:\"IBM Plex Mono\",monospace; font-size:0.82rem; "
+                            f"color:#52514e; margin:0.3rem 0 0.6rem 0'>Weighted contribution: "
+                            f"{det_score}/{d['max_score']} &times; {d['weight']:g}% = <strong style='color:#0b0b0b'>{contribution:.2f}</strong> "
+                            f"of the {s.absolute_score:.1f} absolute score</div>",
+                            unsafe_allow_html=True,
+                        )
                         if det_detail and det_detail["status"] == "ok":
                             gap_color = "#0ca30c" if det_detail["gap"] >= 0 else "#d03b3b"
                             gap_sign = "+" if det_detail["gap"] >= 0 else ""
@@ -522,7 +693,8 @@ with tab_run:
             ],
         }
         st.download_button(
-            "⬇ Download complete run as JSON",
+            "Download complete run as JSON",
+            icon=":material/download:",
             data=json.dumps(export_payload, indent=2, default=str),
             file_name=f"rfp_run_{batch.rfp_run_id[:8]}.json",
             mime="application/json",

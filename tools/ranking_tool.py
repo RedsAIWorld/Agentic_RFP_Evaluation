@@ -137,13 +137,23 @@ class SupplierScoreInputs:
     criterion_scores: dict        # {criterion_id: score (0..max_score)}
 
 
+def criterion_weighted_contribution(score: float, max_score: float, weight: float) -> float:
+    """(score / max_score) * weight -- one criterion's share of the absolute score.
+    Broken out as its own function so the UI can show the same formula it's
+    actually built from (score/max x weight = contribution) instead of only
+    the pre-summed total."""
+    if max_score <= 0:
+        return 0.0
+    return round((score / max_score) * weight, 4)
+
+
 def compute_absolute_score(criterion_scores: dict, criteria: list) -> float:
     """Sum of (criterion_score / max_score) * weight, across the given criteria list."""
     total = 0.0
     for c in criteria:
         cid = c["criterion_id"]
         score = criterion_scores.get(cid, 0)
-        total += (score / c["max_score"]) * c["weight"]
+        total += criterion_weighted_contribution(score, c["max_score"], c["weight"])
     return round(total, 4)
 
 
@@ -258,26 +268,53 @@ def rank_suppliers(suppliers: list) -> list:
     for i, s in enumerate(ordered):
         s["final_rank"] = i + 1
         if i == 0:
-            s["tie_break_reason"] = "Highest PPI."
+            s["tie_break_reason"] = "Highest Peer Performance Index (PPI) of all evaluated suppliers."
         else:
             prev = ordered[i - 1]
             if round(prev["ppi"], PPI_ROUND_DP) != round(s["ppi"], PPI_ROUND_DP):
                 s["tie_break_reason"] = (
-                    f"PPI {s['ppi']:.4f} is lower than rank {i}'s PPI {prev['ppi']:.4f}."
+                    f"PPI of {s['ppi']:.1f} was lower than {prev['supplier_name']}'s {prev['ppi']:.1f} at #{i}."
                 )
             elif prev["submission_date"] != s["submission_date"]:
                 s["tie_break_reason"] = (
-                    f"PPI tied with rank {i} at {s['ppi']:.4f} -> decided by submission date "
-                    f"({prev['submission_date']} is earlier than {s['submission_date']})."
+                    f"PPI tied with {prev['supplier_name']} at {s['ppi']:.1f} -- ranked lower because "
+                    f"its proposal was submitted later ({s['submission_date']} vs {prev['submission_date']})."
                 )
             elif prev["experience_rating"] != s["experience_rating"]:
                 s["tie_break_reason"] = (
-                    f"PPI and submission date tied with rank {i} -> decided by historical experience "
-                    f"rating ({prev['experience_rating']} vs {s['experience_rating']})."
+                    f"PPI and submission date tied with {prev['supplier_name']} -- ranked lower on "
+                    f"historical experience rating ({s['experience_rating']} vs {prev['experience_rating']})."
                 )
             else:
                 s["tie_break_reason"] = (
-                    f"PPI, submission date, and experience rating all tied with rank {i} -> "
-                    f"decided alphabetically by supplier name."
+                    f"PPI, submission date, and experience rating all tied with {prev['supplier_name']} "
+                    f"-- resolved alphabetically by supplier name."
                 )
     return ordered
+
+
+def summarize_rank_explanation(criterion_scoring_detail: dict, criteria_snapshot: list, top_n: int = 2) -> dict:
+    """
+    Pure, deterministic input for the "why did this supplier rank here" panel --
+    no LLM judgment involved, just sorting numbers ranking_tool already computed.
+
+    criterion_scoring_detail: {criterion_id: {benchmark, gap, relative_pct, status}},
+        as persisted by orchestrator.finalize_ranking().
+    criteria_snapshot: the run's full criteria list (for names).
+
+    Returns {"strongest": [...], "weakest": [...]}, each a list of up to top_n
+    dicts {criterion_id, name, relative_pct, gap}, ordered best-to-worst and
+    worst-to-best respectively. Criteria excluded from benchmarking this run
+    (status != "ok") are left out entirely -- there's nothing to compare.
+    """
+    name_by_id = {c["criterion_id"]: c["name"] for c in criteria_snapshot}
+    ok = [
+        {"criterion_id": cid, "name": name_by_id.get(cid, str(cid)), **detail}
+        for cid, detail in criterion_scoring_detail.items()
+        if detail.get("status") == "ok"
+    ]
+    ranked = sorted(ok, key=lambda d: d["relative_pct"], reverse=True)
+    strongest = ranked[:top_n]
+    remainder = ranked[top_n:]
+    weakest = list(reversed(remainder[-top_n:])) if remainder else []
+    return {"strongest": strongest, "weakest": weakest}
