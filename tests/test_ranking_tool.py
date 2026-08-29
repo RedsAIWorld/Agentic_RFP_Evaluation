@@ -11,8 +11,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from tools.ranking_tool import (
     normalize_weights, score_incumbency, compute_absolute_score,
     compute_benchmarks, compute_criterion_gap, compute_relative_performance,
-    compute_ppi, rank_suppliers, tie_break_sort_key,
+    compute_ppi, rank_suppliers, tie_break_sort_key, validate_criteria_configuration,
 )
+import pytest
 
 
 CRITERIA = [
@@ -109,6 +110,52 @@ def test_tie_break_order_is_deterministic_and_repeatable():
     # Alpha and Beta are tied on PPI (87.5) -> earlier submission date (Alpha, 03-01) wins
     assert names_once[1] == "Alpha"
     assert names_once[2] == "Beta"
+
+
+def test_compute_criterion_gap_zero_for_benchmark_leader():
+    assert compute_criterion_gap(9, 9) == 0
+    assert compute_criterion_gap(5, 9) == -4
+
+
+def test_validate_criteria_configuration_rejects_empty():
+    with pytest.raises(ValueError, match="No active evaluation criteria"):
+        validate_criteria_configuration([])
+
+
+def test_validate_criteria_configuration_rejects_negative_weight():
+    with pytest.raises(ValueError, match="invalid weight"):
+        validate_criteria_configuration([
+            {"name": "A", "weight": -5, "max_score": 10, "scoring_source": "llm"},
+        ])
+
+
+def test_validate_criteria_configuration_rejects_zero_max_score():
+    with pytest.raises(ValueError, match="invalid max_score"):
+        validate_criteria_configuration([
+            {"name": "A", "weight": 50, "max_score": 0, "scoring_source": "llm"},
+        ])
+
+
+def test_validate_criteria_configuration_rejects_bad_scoring_source():
+    with pytest.raises(ValueError, match="invalid scoring_source"):
+        validate_criteria_configuration([
+            {"name": "A", "weight": 50, "max_score": 10, "scoring_source": "human"},
+        ])
+
+
+def test_validate_criteria_configuration_rejects_all_zero_weights():
+    with pytest.raises(ValueError, match="sum to zero"):
+        validate_criteria_configuration([
+            {"name": "A", "weight": 0, "max_score": 10, "scoring_source": "llm"},
+            {"name": "B", "weight": 0, "max_score": 10, "scoring_source": "deterministic"},
+        ])
+
+
+def test_validate_criteria_configuration_passes_for_valid_set():
+    validate_criteria_configuration([
+        {"name": "A", "weight": 60, "max_score": 10, "scoring_source": "llm"},
+        {"name": "B", "weight": 40, "max_score": 10, "scoring_source": "deterministic"},
+    ])  # should not raise
 
 
 def test_tie_break_float_noise_still_ties():

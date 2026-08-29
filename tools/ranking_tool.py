@@ -19,6 +19,38 @@ PPI_ROUND_DP = 4                    # tie-break comparisons happen on this round
 # Weight normalization (locked decision: warn + auto-normalize)
 # ---------------------------------------------------------------------------
 
+def validate_criteria_configuration(active_criteria: list) -> None:
+    """
+    Guards the pipeline against a nonsensical criteria configuration BEFORE any
+    evaluation work starts (review point #4). Raises ValueError with a message
+    specific enough to act on. Does not check normalization -- that is
+    normalize_weights()'s job and runs after this passes.
+    """
+    if not active_criteria:
+        raise ValueError("No active evaluation criteria are configured -- cannot run an evaluation.")
+
+    total_weight = 0.0
+    for c in active_criteria:
+        name = c.get("name") or f"criterion_id={c.get('criterion_id')}"
+        weight = c.get("weight")
+        max_score = c.get("max_score")
+        scoring_source = c.get("scoring_source")
+
+        if not isinstance(weight, (int, float)) or weight < 0:
+            raise ValueError(f"Criterion '{name}' has an invalid weight ({weight!r}) -- weights must be a number >= 0.")
+        if not isinstance(max_score, (int, float)) or max_score <= 0:
+            raise ValueError(f"Criterion '{name}' has an invalid max_score ({max_score!r}) -- must be a number > 0.")
+        if scoring_source not in ("llm", "deterministic"):
+            raise ValueError(
+                f"Criterion '{name}' has an invalid scoring_source ({scoring_source!r}) -- "
+                f"must be 'llm' or 'deterministic'."
+            )
+        total_weight += weight
+
+    if total_weight <= 0:
+        raise ValueError("Active criteria weights sum to zero -- cannot normalize or compute any score.")
+
+
 def normalize_weights(active_criteria: list) -> tuple[list, str | None]:
     """
     active_criteria: list of dicts with at least 'weight'.

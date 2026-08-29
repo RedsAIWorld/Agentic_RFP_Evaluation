@@ -289,36 +289,32 @@ with tab_input:
                 progress.progress(1.0, text="Evaluation complete.")
 
                 st.session_state.batch = batch
-                if orch.all_suppliers_succeeded(batch):
-                    orch.finalize_ranking(batch)
+                orch.finalize_ranking(batch)
+                if batch.status == "COMPLETE":
                     st.success("All suppliers evaluated successfully. Ranking finalized -- see the Leaderboard tab.")
                 else:
-                    st.session_state.batch.status = "INCOMPLETE"
-                    st.warning("One or more suppliers failed evaluation. See below to retry or finalize a partial ranking.")
+                    st.warning("One or more suppliers failed evaluation. Ranking cannot be computed until every "
+                               "supplier succeeds -- see below to retry.")
                 st.rerun()
     else:
         st.info("Load the synthetic demo batch, or upload your own PDFs, to begin.")
 
     batch = st.session_state.batch
-    if batch is not None and not orch.all_suppliers_succeeded(batch):
+    if batch is not None and batch.status == "INCOMPLETE":
         st.divider()
         st.markdown("#### ⚠️ Some suppliers failed evaluation")
         failed = [s for s in batch.suppliers if s.eval_status == "FAILED"]
         succeeded = [s for s in batch.suppliers if s.eval_status == "SUCCESS"]
         st.write(f"**{len(succeeded)} succeeded, {len(failed)} failed** (out of {len(batch.suppliers)}). "
-                 f"Successful evaluations are cached -- no ranking will be computed until every "
-                 f"supplier succeeds, or you explicitly finalize with a partial set.")
+                 f"Ranking is never computed while any supplier has failed -- there is no partial-ranking "
+                 f"override. Retry each failed supplier below to unblock the ranking.")
         for s in failed:
             st.error(f"**{s.input.supplier_name}**: {s.error_message}")
             if st.button(f"Retry {s.input.supplier_name}", key=f"retry_{s.input.supplier_name}"):
                 provider = get_active_provider()
                 orch.retry_supplier(batch, s.input.supplier_name, provider)
-                if orch.all_suppliers_succeeded(batch):
-                    orch.finalize_ranking(batch)
+                orch.finalize_ranking(batch)
                 st.rerun()
-        if st.button("Finalize ranking with successful suppliers only (explicit override)"):
-            orch.finalize_ranking(batch, allow_partial=True)
-            st.rerun()
 
 # ---------------------------------------------------------------------------
 # TAB 3: Leaderboard
@@ -419,6 +415,19 @@ with tab_scorecards:
                     st.markdown(ui.bar(r.score, r.max_score, color=ui.SEQUENTIAL_BLUE), unsafe_allow_html=True)
                     st.markdown(f"<div style='text-align:right; font-weight:700; margin-top:2px'>{r.score}/{r.max_score}</div>",
                                 unsafe_allow_html=True)
+                    detail = s.criterion_scoring_detail.get(r.criterion_id)
+                    if detail and detail["status"] == "ok":
+                        gap_color = "#0ca30c" if detail["gap"] >= 0 else "#d03b3b"
+                        gap_sign = "+" if detail["gap"] >= 0 else ""
+                        st.markdown(
+                            f"<div style='display:flex; gap:1.2rem; font-size:0.8rem; color:#52514e; margin:0.2rem 0 0.5rem 0'>"
+                            f"<span>Peer benchmark: <strong>{detail['benchmark']:g}</strong></span>"
+                            f"<span>Gap vs. benchmark: <strong style='color:{gap_color}'>{gap_sign}{detail['gap']:g}</strong></span>"
+                            f"<span>Relative performance: <strong>{detail['relative_pct']:.1f}%</strong></span>"
+                            f"</div>", unsafe_allow_html=True,
+                        )
+                    elif detail:
+                        st.caption("Excluded from peer benchmarking this run (no supplier had a valid score on this criterion).")
                     st.write(r.justification)
                     if r.evidence:
                         for e in r.evidence:
@@ -441,6 +450,17 @@ with tab_scorecards:
                         st.markdown(f"**{d['name']}**  <span style='color:#898781'>&middot; weight {d['weight']:g}%</span>",
                                     unsafe_allow_html=True)
                         st.markdown(ui.bar(det_score, d["max_score"], color="#4338CA"), unsafe_allow_html=True)
+                        det_detail = s.criterion_scoring_detail.get(d["criterion_id"])
+                        if det_detail and det_detail["status"] == "ok":
+                            gap_color = "#0ca30c" if det_detail["gap"] >= 0 else "#d03b3b"
+                            gap_sign = "+" if det_detail["gap"] >= 0 else ""
+                            st.markdown(
+                                f"<div style='display:flex; gap:1.2rem; font-size:0.8rem; color:#52514e; margin:0.2rem 0 0.4rem 0'>"
+                                f"<span>Peer benchmark: <strong>{det_detail['benchmark']:g}</strong></span>"
+                                f"<span>Gap: <strong style='color:{gap_color}'>{gap_sign}{det_detail['gap']:g}</strong></span>"
+                                f"<span>Relative: <strong>{det_detail['relative_pct']:.1f}%</strong></span>"
+                                f"</div>", unsafe_allow_html=True,
+                            )
                         st.caption(det_reason)
 
 # ---------------------------------------------------------------------------

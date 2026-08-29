@@ -1,9 +1,12 @@
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
 from db.seed import init_db
 from db import repository as repo
 import orchestrator as orch
 from tools.demo_provider import DemoProvider
 from data.synthetic.content import ALL_SUPPLIERS, SUGGESTED_METADATA
-import os
 
 init_db()
 active_criteria = repo.get_active_criteria()

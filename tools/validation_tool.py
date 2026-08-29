@@ -22,7 +22,10 @@ from difflib import SequenceMatcher
 import re
 
 
-EVIDENCE_MATCH_THRESHOLD = 0.82  # fuzzy-match ratio; below this, flag as unverifiable
+EVIDENCE_MATCH_THRESHOLD = 0.95  # fuzzy-match ratio; below this, flag as unverifiable.
+# Raised from 0.82: a short quote can flip meaning on a small edit (e.g. "ARE certified"
+# vs "are NOT certified" is still ~0.9 similar by character overlap), so the bar needs to
+# be close to exact to actually catch a misquote rather than just catch typos.
 VALID_EVIDENCE_STATUSES = {"missing", "weak", "moderate", "strong"}
 
 
@@ -83,10 +86,12 @@ def verify_evidence(evidence_items: list, pages: list) -> list:
         # If the claimed page doesn't exist or is empty, also check neighbouring
         # pages in case the model was off by one (common, harmless LLM slip).
         verified = _quote_found_in_page(quote, page_text)
+        verified_page = page_num if verified else None
         if not verified:
             for alt_page in (page_num - 1, page_num + 1):
                 if alt_page in pages_by_num and _quote_found_in_page(quote, pages_by_num[alt_page]):
                     verified = True
+                    verified_page = alt_page
                     break
         if not verified:
             # A sentence can straddle a physical page break in the source PDF (the
@@ -98,8 +103,12 @@ def verify_evidence(evidence_items: list, pages: list) -> list:
                     joined = pages_by_num[a] + " " + pages_by_num[b]
                     if _quote_found_in_page(quote, joined):
                         verified = True
+                        verified_page = f"{a}-{b}"
                         break
-        verified_items.append({"quote": quote, "page": page_num, "verified": verified})
+        verified_items.append({
+            "quote": quote, "page": page_num, "claimed_page": page_num,
+            "verified_page": verified_page, "verified": verified,
+        })
     return verified_items
 
 
@@ -113,17 +122,32 @@ def validate_supplier_result(raw_llm_result: dict, llm_criteria: list, pages: li
     criteria_by_id = {c["criterion_id"]: c for c in llm_criteria}
     raw_by_id = {}
 
+    if not isinstance(raw_llm_result, dict):
+        warnings.append(
+            f"LLM response was not a JSON object (got {type(raw_llm_result).__name__}) -- treated as empty."
+        )
+        raw_llm_result = {}
+
     raw_criteria = raw_llm_result.get("criteria", [])
     if not isinstance(raw_criteria, list):
         warnings.append("LLM response 'criteria' was not a list -- treated as empty.")
         raw_criteria = []
 
     for item in raw_criteria:
+        if not isinstance(item, dict):
+            warnings.append(f"LLM returned a non-object criteria entry ({item!r}) -- ignored.")
+            continue
         cid = item.get("criterion_id")
-        if cid in criteria_by_id:
-            raw_by_id[cid] = item
-        else:
+        if cid not in criteria_by_id:
             warnings.append(f"LLM returned a result for unknown criterion_id={cid} -- ignored.")
+            continue
+        if cid in raw_by_id:
+            warnings.append(
+                f"LLM returned more than one result for criterion_id={cid} -- "
+                f"keeping the first, discarding the duplicate."
+            )
+            continue
+        raw_by_id[cid] = item
 
     results = []
     for criterion in llm_criteria:
@@ -189,6 +213,14 @@ def validate_supplier_result(raw_llm_result: dict, llm_criteria: list, pages: li
             item_warnings.append(f"{len(unverified)} evidence item(s) unverifiable against source text.")
 
         evidence_verified = any_verified if any_claimed else (evidence_status == "missing")
+
+        if (not any_claimed or evidence_status == "missing") and score > max_score / 2:
+            msg = (
+                f"Criterion '{name}': score {score}/{max_score} is above half-marks but no "
+                f"supporting evidence was cited -- treat this score with caution."
+            )
+            warnings.append(msg)
+            item_warnings.append(msg)
 
         results.append(ValidatedCriterionResult(
             criterion_id=cid, name=name, weight=criterion["weight"], max_score=max_score,

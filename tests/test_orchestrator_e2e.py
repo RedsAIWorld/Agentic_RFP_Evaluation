@@ -2,12 +2,17 @@
 End-to-end orchestrator test using a stubbed LLM provider (no network calls,
 no API key needed). This exercises the full pipeline wiring -- Document Tool
 -> Evaluation Agent -> Validation Tool -> Score -> Benchmark -> Rank ->
-Persist -- and proves two things the rubric explicitly cares about:
+Persist -- and proves the things the rubric explicitly cares about:
 
 1. Determinism: running finalize_ranking twice on the same validated inputs
    produces byte-identical ranking output.
 2. The failure/gating path: one supplier failing does not silently produce
-   a ranking; an explicit override is required and is recorded as a warning.
+   a ranking, and there is no override to force one -- the run stays
+   INCOMPLETE until every supplier succeeds (via retry).
+3. Duplicate/empty supplier names are rejected before any evaluation work
+   starts.
+4. Benchmark/gap/relative-performance are actually computed and persisted
+   per criterion (not just used transiently for the PPI).
 
 Run with: pytest -q tests/test_orchestrator_e2e.py
 """
@@ -97,7 +102,83 @@ def test_full_pipeline_deterministic_ranking(tmp_path, monkeypatch):
     assert apex_rank == 1
 
 
-def test_failure_gates_ranking_until_override(tmp_path, monkeypatch):
+def test_gap_and_relative_performance_are_persisted_per_criterion(tmp_path, monkeypatch):
+    _use_temp_db(monkeypatch, tmp_path)
+    active_criteria = repo.get_active_criteria()
+    llm_criterion_ids = [c["criterion_id"] for c in active_criteria if c["scoring_source"] == "llm"]
+
+    with open(os.path.join(os.path.dirname(__file__), "..", "data", "synthetic",
+                            "Supplier_Apex_Systems.pdf"), "rb") as f:
+        apex_bytes = f.read()
+    with open(os.path.join(os.path.dirname(__file__), "..", "data", "synthetic",
+                            "Supplier_BrightPath_Tech.pdf"), "rb") as f:
+        brightpath_bytes = f.read()
+
+    canned = {
+        "Apex Systems": make_canned("Apex Systems", {cid: 9 for cid in llm_criterion_ids}),
+        "BrightPath Tech": make_canned("BrightPath Tech", {cid: 5 for cid in llm_criterion_ids}),
+    }
+    provider = FakeProvider(canned)
+    supplier_inputs = [
+        orch.SupplierInput("Apex Systems", apex_bytes, "2026-03-04", 7, False, None),
+        orch.SupplierInput("BrightPath Tech", brightpath_bytes, "2026-03-01", 4, False, None),
+    ]
+    batch = orch.create_batch(active_criteria, "Anthropic", "fake-model", "buyer context", supplier_inputs)
+    for s in batch.suppliers:
+        orch.run_evaluation_for_supplier(s, batch.llm_criteria, batch.buyer_context, provider)
+    orch.finalize_ranking(batch)
+
+    apex = next(s for s in batch.suppliers if s.input.supplier_name == "Apex Systems")
+    brightpath = next(s for s in batch.suppliers if s.input.supplier_name == "BrightPath Tech")
+
+    # Apex scored 9 on every LLM criterion -- it IS the benchmark leader, so its gap is 0.
+    for cid in llm_criterion_ids:
+        detail = apex.criterion_scoring_detail[cid]
+        assert detail["status"] == "ok"
+        assert detail["benchmark"] == 9
+        assert detail["gap"] == 0
+        assert detail["relative_pct"] == 100.0
+
+    # BrightPath scored 5 against a benchmark of 9 -- negative gap, <100% relative.
+    for cid in llm_criterion_ids:
+        detail = brightpath.criterion_scoring_detail[cid]
+        assert detail["benchmark"] == 9
+        assert detail["gap"] == -4
+        assert round(detail["relative_pct"], 2) == round(5 / 9 * 100.0, 2)
+
+
+def test_duplicate_supplier_names_rejected(tmp_path, monkeypatch):
+    _use_temp_db(monkeypatch, tmp_path)
+    active_criteria = repo.get_active_criteria()
+    with open(os.path.join(os.path.dirname(__file__), "..", "data", "synthetic",
+                            "Supplier_Apex_Systems.pdf"), "rb") as f:
+        apex_bytes = f.read()
+    supplier_inputs = [
+        orch.SupplierInput("Apex Systems", apex_bytes, "2026-03-04", 7, False, None),
+        orch.SupplierInput("  apex systems  ", apex_bytes, "2026-03-01", 4, False, None),
+    ]
+    try:
+        orch.create_batch(active_criteria, "Anthropic", "fake-model", "buyer context", supplier_inputs)
+        assert False, "expected ValueError for duplicate supplier name"
+    except ValueError as e:
+        assert "Duplicate supplier name" in str(e)
+
+
+def test_empty_supplier_name_rejected(tmp_path, monkeypatch):
+    _use_temp_db(monkeypatch, tmp_path)
+    active_criteria = repo.get_active_criteria()
+    with open(os.path.join(os.path.dirname(__file__), "..", "data", "synthetic",
+                            "Supplier_Apex_Systems.pdf"), "rb") as f:
+        apex_bytes = f.read()
+    supplier_inputs = [orch.SupplierInput("   ", apex_bytes, "2026-03-04", 7, False, None)]
+    try:
+        orch.create_batch(active_criteria, "Anthropic", "fake-model", "buyer context", supplier_inputs)
+        assert False, "expected ValueError for empty supplier name"
+    except ValueError as e:
+        assert "non-empty name" in str(e)
+
+
+def test_failure_gates_ranking_with_no_override_possible(tmp_path, monkeypatch):
     _use_temp_db(monkeypatch, tmp_path)
     active_criteria = repo.get_active_criteria()
     llm_criterion_ids = [c["criterion_id"] for c in active_criteria if c["scoring_source"] == "llm"]
@@ -123,7 +204,11 @@ def test_failure_gates_ranking_until_override(tmp_path, monkeypatch):
     assert orch.all_suppliers_resolved(batch)
     assert not orch.all_suppliers_succeeded(batch)
 
-    # Without override: must not silently rank
-    orch.finalize_ranking(batch, allow_partial=False)
+    # There is no override anymore -- a failed supplier permanently blocks ranking
+    # until it succeeds (there is no allow_partial parameter to bypass this).
+    import inspect
+    assert "allow_partial" not in inspect.signature(orch.finalize_ranking).parameters
+
+    orch.finalize_ranking(batch)
     assert batch.status == "INCOMPLETE"
     assert batch.suppliers[0].final_rank is None

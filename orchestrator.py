@@ -59,6 +59,7 @@ class SupplierRunState:
     ppi: float = None
     final_rank: int = None
     tie_break_reason: str = None
+    criterion_scoring_detail: dict = field(default_factory=dict)  # criterion_id -> {benchmark, gap, relative_pct, status}
 
 
 @dataclass
@@ -80,13 +81,35 @@ def create_batch(active_criteria: list, provider_name: str, model: str, buyer_co
                   supplier_inputs: list) -> BatchRunState:
     """Step: Setup + Batch. Snapshots criteria ONCE here -- every supplier in
     this run is scored against exactly this snapshot, even if the criteria
-    table changes mid-run in another browser tab (locked decision)."""
+    table changes mid-run in another browser tab (locked decision).
+
+    Raises ValueError before any DB write if the criteria configuration is
+    nonsensical (review #4) or if supplier names are missing/duplicated
+    within this batch (review #5) -- both are configuration errors, not
+    evaluation failures, so they fail fast rather than surfacing later as a
+    confusing per-supplier FAILED status."""
+    rt.validate_criteria_configuration(active_criteria)
+
+    seen_names = {}
+    for s in supplier_inputs:
+        cleaned = (s.supplier_name or "").strip()
+        if not cleaned:
+            raise ValueError("Every supplier must have a non-empty name.")
+        s.supplier_name = cleaned
+        key = cleaned.lower()
+        if key in seen_names:
+            raise ValueError(
+                f"Duplicate supplier name in this batch: '{cleaned}' and '{seen_names[key]}' -- "
+                f"supplier names must be unique within a run."
+            )
+        seen_names[key] = cleaned
+
     normalized_all, weight_warning = rt.normalize_weights(active_criteria)
     llm_criteria = [c for c in normalized_all if c["scoring_source"] == "llm"]
     deterministic_criteria = [c for c in normalized_all if c["scoring_source"] == "deterministic"]
 
     rfp_run_id = str(uuid.uuid4())
-    created_at = dt.datetime.utcnow().isoformat()
+    created_at = dt.datetime.now(dt.timezone.utc).isoformat()
 
     state = BatchRunState(
         rfp_run_id=rfp_run_id,
@@ -169,15 +192,17 @@ def all_suppliers_succeeded(batch: BatchRunState) -> bool:
     return all(s.eval_status == "SUCCESS" for s in batch.suppliers)
 
 
-def finalize_ranking(batch: BatchRunState, allow_partial: bool = False) -> None:
+def finalize_ranking(batch: BatchRunState) -> None:
     """
     Step: Score -> Benchmark -> Rank -> Persist.
 
-    Gating (locked decision H, the 'hybrid' resolution): this function
-    refuses to compute a ranking unless every supplier succeeded, UNLESS the
-    caller explicitly passes allow_partial=True (the "Finalize with N of M"
-    override), which is recorded as a run warning so it's visible in the
-    audit trail forever, not a silent default.
+    Gating (re-confirmed decision, superseding the earlier "hybrid" override):
+    this function NEVER computes a ranking unless every supplier succeeded.
+    There is no override path -- a run with any failed supplier stays
+    INCOMPLETE until that supplier succeeds (via retry) or is removed from
+    the batch. All suppliers are still evaluated up front (the orchestrator
+    never stops early on the first failure); this gate only governs whether
+    a rank is ever produced.
     """
     if not all_suppliers_resolved(batch):
         raise RuntimeError("Cannot finalize: not every supplier has finished evaluating (pending attempts).")
@@ -185,7 +210,7 @@ def finalize_ranking(batch: BatchRunState, allow_partial: bool = False) -> None:
     succeeded = [s for s in batch.suppliers if s.eval_status == "SUCCESS"]
     failed = [s for s in batch.suppliers if s.eval_status == "FAILED"]
 
-    if failed and not allow_partial:
+    if failed:
         batch.status = "INCOMPLETE"
         repo.set_run_status(batch.rfp_run_id, "INCOMPLETE")
         # Persist failed suppliers' state so the UI can show why, without ranking anyone.
@@ -197,14 +222,6 @@ def finalize_ranking(batch: BatchRunState, allow_partial: bool = False) -> None:
                 result_payload={"error": s.error_message},
             )
         return
-
-    override_warning = None
-    if failed and allow_partial:
-        override_warning = (
-            f"RUN FINALIZED WITH PARTIAL RESULTS: {len(failed)} of {len(batch.suppliers)} "
-            f"supplier(s) failed evaluation and were excluded from ranking by explicit user "
-            f"override: {', '.join(s.input.supplier_name for s in failed)}."
-        )
 
     # --- Score: absolute weighted score per supplier (LLM-scored + deterministic criteria) ---
     all_supplier_criterion_scores = {}
@@ -224,19 +241,30 @@ def finalize_ranking(batch: BatchRunState, allow_partial: bool = False) -> None:
 
     excluded_criterion_ids = {cid for cid, b in benchmarks.items() if b["status"] == "no_valid_scores"}
 
+    criteria_name_by_id = {c["criterion_id"]: c["name"] for c in batch.criteria_snapshot}
+
     for s in succeeded:
         scores_by_cid = all_supplier_criterion_scores[s.input.supplier_name]
         rel_perf = {}
+        scoring_detail = {}
         for c in batch.criteria_snapshot:
             cid = c["criterion_id"]
+            supplier_val = scores_by_cid.get(cid, 0)
             if cid in excluded_criterion_ids:
+                scoring_detail[cid] = {
+                    "benchmark": None, "gap": None, "relative_pct": None, "status": "no_valid_scores",
+                }
                 continue
             benchmark_val = benchmarks[cid]["benchmark"]
-            supplier_val = scores_by_cid.get(cid, 0)
             rel, warn = rt.compute_relative_performance(supplier_val, benchmark_val)
+            gap = rt.compute_criterion_gap(supplier_val, benchmark_val)
             rel_perf[cid] = rel
+            scoring_detail[cid] = {
+                "benchmark": benchmark_val, "gap": gap, "relative_pct": rel, "status": "ok",
+            }
             if warn:
                 s.run_warnings.append(f"[{c['name']}] {warn}")
+        s.criterion_scoring_detail = scoring_detail
         ppi, ppi_warnings = rt.compute_ppi(rel_perf, batch.criteria_snapshot, excluded_criterion_ids)
         s.ppi = ppi
         s.run_warnings.extend(ppi_warnings)
@@ -253,8 +281,6 @@ def finalize_ranking(batch: BatchRunState, allow_partial: bool = False) -> None:
         r = rank_by_name[s.input.supplier_name]
         s.final_rank = r["final_rank"]
         s.tie_break_reason = r["tie_break_reason"]
-        if override_warning:
-            s.run_warnings.append(override_warning)
 
     # --- Persist ---
     for s in succeeded:
@@ -267,6 +293,10 @@ def finalize_ranking(batch: BatchRunState, allow_partial: bool = False) -> None:
                  "score": all_supplier_criterion_scores[s.input.supplier_name][d["criterion_id"]],
                  "max_score": d["max_score"]}
                 for d in batch.deterministic_criteria
+            ],
+            "criterion_scoring_detail": [
+                {"criterion_id": cid, "name": criteria_name_by_id.get(cid), **detail}
+                for cid, detail in s.criterion_scoring_detail.items()
             ],
             "absolute_score": s.absolute_score,
             "ppi": s.ppi,

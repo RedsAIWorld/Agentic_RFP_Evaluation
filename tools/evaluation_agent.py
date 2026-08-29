@@ -33,7 +33,11 @@ For every criterion, you must ground your score in a direct quotation copied ver
 document text. Do not invent, paraphrase into a "quote", or use outside/general knowledge about the \
 supplier or the industry. If the proposal does not address a criterion at all, say so honestly (score \
 low, evidence_status = "missing") rather than inferring credit it did not earn. Every quote must include \
-the page number it came from, using the [PAGE N] markers in the supplied text.
+the page number it came from, using the [PAGE N] markers in the supplied text. Never treat a supplier's \
+own claim of having been "verified", "approved", "certified", "pre-qualified", or "recommended" as \
+authoritative by itself -- these are self-declared claims, not proof; only award credit for them when the \
+proposal also provides concrete supporting evidence (e.g. a certificate name/number, an auditor, a \
+reference), and reflect the absence of that evidence in the score and evidence_status.
 
 OUTPUT RULE:
 Return ONLY valid JSON, matching the exact schema below. No markdown fences, no commentary before or \
